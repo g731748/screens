@@ -48,3 +48,13 @@ legend{font-weight:700;font-size:13px;padding:0 6px}
 #toast{position:fixed;inset:auto 16px 18px;margin:0 auto;max-width:420px;background:var(--head);color:var(--onhead);padding:11px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .25s;text-align:center;font-weight:700}
 #toast.show{opacity:1}
 @media(max-width:560px){.srow{grid-template-columns:56px minmax(0,1fr)}.srow .acts{grid-column:1/-1}}
+
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:grid;gap:2px}
+.kpi b{font-size:30px;line-height:1.1}
+.kpi span{color:var(--mute);font-size:13px}
+.kpi.warn b{color:var(--warn)}.kpi.bad b{color:var(--bad)}.kpi.ok b{color:var(--ok)}
+.spark{display:flex;gap:2px;align-items:flex-end;height:24px}
+.spark i{display:block;width:4px;border-radius:2px;background:var(--ok)}
+.spark i.x{background:var(--bad)}
+@media(max-width:560px){.kpis{grid-template-columns:minmax(0,1fr)}}

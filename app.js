@@ -37,9 +37,15 @@
     if(!ts) return ['לא התחבר עדיין', 'warn'];
     var m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
     if(m < 5) return ['מחובר', 'ok'];
-    if(m < 60) return ['לפני ' + m + ' דק׳', 'ok'];
-    if(m < 1440) return ['לפני ' + Math.round(m / 60) + ' שעות', 'warn'];
-    return ['לא התחבר ' + Math.round(m / 1440) + ' ימים', 'bad'];
+    if(m < 60) return ['לא מדווח ' + m + ' דק׳', 'warn'];
+    if(m < 1440) return ['לא מחובר ' + Math.round(m / 60) + ' שעות', 'bad'];
+    return ['לא מחובר ' + Math.round(m / 1440) + ' ימים', 'bad'];
+  }
+  function sparkline(pings){
+    var d = el('div', 'spark'), base = Math.floor(Date.now() / 3600000) * 3600000;
+    for(var k = 23; k >= 0; k--){ var t = base - k * 3600000, i = el('i', pings[t] ? '' : 'x'); i.style.height = (pings[t] ? 22 : 8) + 'px'; d.appendChild(i); }
+    d.title = '24 שעות אחרונות: כל עמודה היא שעה. אדום זה שעה בלי חיבור.';
+    return d;
   }
 
   /* ---------- login ---------- */
@@ -84,40 +90,62 @@
     try{ navigator.clipboard.writeText(text).then(function(){ toast(label + ' הועתק'); }, function(){ window.prompt('העתיקו:', text); }); }
     catch(e){ window.prompt('העתיקו:', text); }
   }
+  var adminTimer = null;
   function renderAdmin(){
+    clearInterval(adminTimer);
     var m = shell('מיכאל מערכות • אדמין');
     m.appendChild(el('h1', null, 'לקוחות'));
-    m.appendChild(el('p', 'sub', 'כל לקוח רואה רק את המסך שלו. השעיה חוסמת את הכניסה והמסך מפסיק להציג תוכן.'));
+    m.appendChild(el('p', 'sub', 'כל לקוח רואה רק את המסך שלו. השעיה חוסמת את הכניסה והמסך מציג הודעת חידוש מנוי. הדף מתעדכן לבד כל חצי דקה.'));
+    var kp = el('div', 'kpis'); m.appendChild(kp);
     var box = el('div', 'box'), sc = el('div', 'scroll'); box.appendChild(sc); m.appendChild(box);
-    sb.from('clients').select('*, screens(id,name,token,last_seen)').order('created_at').then(function(r){
-      if(!ok(r)) return;
-      var clients = r.data || [];
-      var tb = el('table'), th = el('thead'), hr = el('tr');
-      ['לקוח', 'סוג', 'מסלול', 'ציוד', 'מסך', 'מצב', 'פעולות'].forEach(function(h){ hr.appendChild(el('th', null, h)); });
-      th.appendChild(hr); tb.appendChild(th);
-      var body = el('tbody');
-      clients.forEach(function(c){
-        var scr = (c.screens && c.screens[0]) || null, tr = el('tr');
-        tr.appendChild(el('td', null, c.name)); tr.appendChild(el('td', null, c.biz_type || ''));
-        var t = el('td'); t.appendChild(el('span', 'pill tier', TIERS[c.tier])); tr.appendChild(t);
-        tr.appendChild(el('td', null, EQ[c.equipment]));
-        var st = el('td'), a = scr ? agoText(scr.last_seen) : ['אין מסך', 'warn'];
-        st.appendChild(el('span', 'pill ' + a[1], a[0])); tr.appendChild(el('td', null, scr ? scr.name : '')); tr.appendChild(st);
-        var ac = el('td'), row = el('div', 'acts');
-        function btn(txt, cls, fn){ var x = el('button', cls || null, txt); x.type = 'button'; x.addEventListener('click', fn); row.appendChild(x); }
-        btn('פתח כלקוח', null, function(){ renderClient(c.id, true); });
-        btn('הגדרות', null, function(){ renderEdit(c, scr); });
-        if(scr) btn('קישור נגן', null, function(){ copy(playerLink(scr.token), 'הקישור'); });
-        btn(c.active ? 'השעה' : 'החזר גישה', c.active ? 'd' : null, function(){
-          sb.from('clients').update({active:!c.active}).eq('id', c.id).then(function(x){ if(ok(x)){ toast(c.active ? 'הלקוח הושעה' : 'הגישה הוחזרה'); renderAdmin(); } });
+    var formsDone = false;
+    function load(){
+      if(!document.body.contains(box)){ clearInterval(adminTimer); return; }
+      Promise.all([
+        sb.from('clients').select('*, screens(id,name,token,last_seen,player_ver)').order('created_at'),
+        sb.from('screen_pings').select('screen_id,hour').gte('hour', new Date(Date.now() - 25 * 3600000).toISOString())
+      ]).then(function(rs){
+        var r = rs[0]; if(!ok(r)) return;
+        var pingMap = {}; ((rs[1] && rs[1].data) || []).forEach(function(p){ (pingMap[p.screen_id] = pingMap[p.screen_id] || {})[new Date(p.hour).getTime()] = 1; });
+        var clients = r.data || [], okN = 0, warnN = 0, badN = 0;
+        var tb = el('table'), th = el('thead'), hr = el('tr');
+        ['לקוח', 'סוג', 'מסלול', 'ציוד', 'מסך', 'מצב', '24 שעות', 'גרסה', 'פעולות'].forEach(function(h){ hr.appendChild(el('th', null, h)); });
+        th.appendChild(hr); tb.appendChild(th);
+        var body = el('tbody');
+        clients.forEach(function(c){
+          var scr = (c.screens && c.screens[0]) || null, tr = el('tr');
+          tr.appendChild(el('td', null, c.name)); tr.appendChild(el('td', null, c.biz_type || ''));
+          var t = el('td'); t.appendChild(el('span', 'pill tier', TIERS[c.tier])); tr.appendChild(t);
+          tr.appendChild(el('td', null, EQ[c.equipment]));
+          var st = el('td'), a = scr ? agoText(scr.last_seen) : ['אין מסך', 'warn'];
+          if(c.active){ if(a[1] === 'ok') okN++; else if(a[1] === 'warn') warnN++; else badN++; }
+          st.appendChild(el('span', 'pill ' + (c.active ? a[1] : 'warn'), c.active ? a[0] : 'מושעה'));
+          tr.appendChild(el('td', null, scr ? scr.name : '')); tr.appendChild(st);
+          var sp = el('td'); if(scr) sp.appendChild(sparkline(pingMap[scr.id] || {})); tr.appendChild(sp);
+          tr.appendChild(el('td', 'note', scr && scr.player_ver ? scr.player_ver : ''));
+          var ac = el('td'), row = el('div', 'acts');
+          function btn(txt, cls, fn){ var x = el('button', cls || null, txt); x.type = 'button'; x.addEventListener('click', fn); row.appendChild(x); }
+          btn('פתח כלקוח', null, function(){ clearInterval(adminTimer); renderClient(c.id, true); });
+          btn('הגדרות', null, function(){ clearInterval(adminTimer); renderEdit(c, scr); });
+          if(scr){
+            btn('קישור נגן', null, function(){ copy(playerLink(scr.token), 'הקישור'); });
+            btn('רענן נגן', null, function(){ sb.rpc('admin_send_cmd', {p_screen:scr.id, p_cmd:'reload'}).then(function(x){ if(ok(x)) toast('הפקודה נשלחה, המסך יתרענן תוך כדקה'); }); });
+          }
+          btn(c.active ? 'השעה' : 'החזר גישה', c.active ? 'd' : null, function(){
+            sb.from('clients').update({active:!c.active}).eq('id', c.id).then(function(x){ if(ok(x)){ toast(c.active ? 'הלקוח הושעה' : 'הגישה הוחזרה'); load(); } });
+          });
+          ac.appendChild(row); tr.appendChild(ac); body.appendChild(tr);
         });
-        ac.appendChild(row); tr.appendChild(ac); body.appendChild(tr);
+        tb.appendChild(body); sc.textContent = ''; sc.appendChild(tb);
+        if(!clients.length) sc.appendChild(el('p', 'note', 'עדיין אין לקוחות. הוסיפו את הראשון למטה.'));
+        kp.textContent = '';
+        [[okN, 'מסכים מחוברים', 'ok'], [warnN, 'לא מדווחים', 'warn'], [badN, 'בלי חיבור מעל שעה', 'bad']].forEach(function(k){
+          var d = el('div', 'kpi ' + k[2]); d.appendChild(el('b', null, String(k[0]))); d.appendChild(el('span', null, k[1])); kp.appendChild(d);
+        });
+        if(!formsDone){ formsDone = true; m.appendChild(addClientForm(clients)); m.appendChild(linkForm(clients)); }
       });
-      tb.appendChild(body); sc.appendChild(tb);
-      if(!clients.length) sc.appendChild(el('p', 'note', 'עדיין אין לקוחות. הוסיפו את הראשון למטה.'));
-      m.appendChild(addClientForm(clients));
-      m.appendChild(linkForm(clients));
-    });
+    }
+    load(); adminTimer = setInterval(load, 30000);
   }
   function addClientForm(){
     var box = el('div', 'box'); box.appendChild(el('h2', null, 'הוספת לקוח'));

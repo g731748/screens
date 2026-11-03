@@ -36,7 +36,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
 (function(){
   'use strict';
   var C = window.CONFIG || {}, T = new URLSearchParams(location.search).get('t') || '';
-  var KEY = 'pd:' + T, data = null, list = [], idx = -1, timer = null;
+  var VER = '1.1', KEY = 'pd:' + T, data = null, list = [], idx = -1, timer = null;
   function $(i){ return document.getElementById(i); }
   function el(t, c, x){ var e = document.createElement(t); if(c) e.className = c; if(x != null) e.textContent = x; return e; }
   function say(t, sub){ var m = $('msg'); m.textContent = ''; if(t){ m.appendChild(el('div', 'mt', t)); if(sub) m.appendChild(el('div', 'ms', sub)); m.style.display = 'grid'; } else m.style.display = 'none'; }
@@ -122,11 +122,21 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
   }
   setInterval(ticker, 12000);
 
+  /* remote command from the admin screen: a new cmd_id means act once */
+  function handleCmd(d){
+    try{
+      if(!d || d.cmd_id == null) return false;
+      var k = 'cmd:' + T, last = localStorage.getItem(k);
+      localStorage.setItem(k, String(d.cmd_id));
+      if(last !== null && String(d.cmd_id) !== last && d.cmd === 'reload'){ location.reload(); return true; }
+    }catch(e){}
+    return false;
+  }
   function pull(){
     if(!T){ say('חסר קוד מסך בכתובת'); return; }
-    fetch(C.url + '/rest/v1/rpc/player_data', {method:'POST', headers:{'apikey':C.key, 'Authorization':'Bearer ' + C.key, 'Content-Type':'application/json'}, body:JSON.stringify({p_token:T})})
+    fetch(C.url + '/rest/v1/rpc/player_data', {method:'POST', headers:{'apikey':C.key, 'Authorization':'Bearer ' + C.key, 'Content-Type':'application/json'}, body:JSON.stringify({p_token:T, p_ver:VER})})
       .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
-      .then(function(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} apply(d); })
+      .then(function(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} if(handleCmd(d)) return; apply(d); })
       .catch(function(){ if(!data){ try{ var c = localStorage.getItem(KEY); if(c) apply(JSON.parse(c)); else { say('מתחבר...', 'ממתין לחיבור לאינטרנט'); setTimeout(pull, 10000); } }catch(e){ say('מתחבר...', 'ממתין לחיבור לאינטרנט'); setTimeout(pull, 10000); } } });
   }
   function apply(d){
