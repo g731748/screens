@@ -243,4 +243,100 @@
           var ti = input('text', null, s.title || ''), pe = select(PERIODS, s.period), fr = input('date', null, s.from_date || ''), to = input('date', null, s.to_date || ''), du = input('number', null, s.dur);
           du.min = 3; du.max = 60;
           edit.appendChild(field('כותרת', ti)); edit.appendChild(field('מתי מוצגת', pe)); edit.appendChild(field('מתאריך', fr)); edit.appendChild(field('עד תאריך', to)); edit.appendChild(field('שניות', du));
-          var sv = el('button', 'p',
+          var sv = el('button', 'p', 'שמור'); sv.type = 'button';
+          sv.addEventListener('click', function(){
+            sb.from('slides').update({title:ti.value.trim() || null, period:pe.value, from_date:nul(fr.value), to_date:nul(to.value), dur:Math.max(3, Math.min(60, +du.value || 8))}).eq('id', s.id).then(function(x){ if(ok(x)){ toast('נשמר'); loadSlides(cid, box); } });
+          });
+          edit.appendChild(sv); row.appendChild(edit);
+        }
+        box.appendChild(row);
+      });
+    });
+  }
+  function uploadBox(cid, done){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'העלאת תמונה'));
+    var f = el('form'), file = input('file', null); file.accept = 'image/*'; file.required = true;
+    var ti = input('text', null), pe = select(PERIODS), fr = input('date', null), to = input('date', null), du = input('number', null, 8); du.min = 3; du.max = 60;
+    f.appendChild(field('תמונה', file)); f.appendChild(field('כותרת (לא מוצגת במסך)', ti)); f.appendChild(field('מתי מוצגת', pe));
+    f.appendChild(field('מתאריך', fr)); f.appendChild(field('עד תאריך', to)); f.appendChild(field('שניות', du));
+    var go = el('button', 'p', 'העלה'); go.type = 'submit'; f.appendChild(go);
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); if(!file.files[0]) return; go.disabled = true; go.textContent = 'מעלה...';
+      var path = cid + '/' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + '.jpg';
+      resize(file.files[0], 1920).then(function(blob){ return sb.storage.from('slides').upload(path, blob, {contentType:'image/jpeg'}); }).then(function(u){
+        if(u.error) throw u.error;
+        return sb.from('slides').select('position').eq('client_id', cid).order('position', {ascending:false}).limit(1);
+      }).then(function(p){
+        var next = p.data && p.data[0] ? p.data[0].position + 1 : 0;
+        return sb.from('slides').insert({client_id:cid, image_path:path, title:ti.value.trim() || null, period:pe.value, from_date:nul(fr.value), to_date:nul(to.value), dur:Math.max(3, Math.min(60, +du.value || 8)), position:next});
+      }).then(function(x){
+        go.disabled = false; go.textContent = 'העלה';
+        if(ok(x)){ toast('התמונה עלתה'); f.reset(); du.value = 8; done(); }
+      }).catch(function(err){ go.disabled = false; go.textContent = 'העלה'; toast('שגיאה: ' + err.message); });
+    });
+    box.appendChild(f); return box;
+  }
+  function tickerBox(cid){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'פס רץ וחיזוקים'));
+    var f = el('form'), mode = select({off:'כבוי', msg:'הודעה בלבד', torah:'חיזוקים בלבד', both:'הודעה וחיזוקים'});
+    var msg = input('text', null); msg.maxLength = 140;
+    var tor = el('textarea'); tor.placeholder = 'חיזוק בכל שורה';
+    f.appendChild(field('מצב', mode)); f.appendChild(field('הודעה למסך', msg)); f.appendChild(field('חיזוקים, שורה לכל חיזוק', tor, 'full'));
+    var go = el('button', 'p', 'שמור'); go.type = 'submit'; f.appendChild(go);
+    sb.from('settings').select('*').eq('client_id', cid).maybeSingle().then(function(r){
+      if(r.data){ mode.value = r.data.ticker_mode; msg.value = r.data.message || ''; tor.value = (r.data.torah || []).join('\n'); }
+    });
+    f.addEventListener('submit', function(e){
+      e.preventDefault();
+      sb.from('settings').upsert({client_id:cid, ticker_mode:mode.value, message:msg.value.trim(), torah:tor.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)}, {onConflict:'client_id'}).then(function(x){ if(ok(x)) toast('נשמר'); });
+    });
+    box.appendChild(f); return box;
+  }
+  function shabbatBox(cid){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'זמני שבת וחגים'));
+    box.appendChild(el('p', 'note', 'כל שורה היא שבת או חג. התמונה עולה במסך שלושה ימים לפני הכניסה ויורדת ביציאה. אין שורה פעילה: אין תמונה, ולא נשארים זמנים ישנים.'));
+    var list = el('div'); box.appendChild(list);
+    function load(){
+      sb.from('shabbat_rows').select('*').eq('client_id', cid).order('eve').then(function(r){
+        if(!ok(r)) return; list.textContent = '';
+        (r.data || []).forEach(function(x){
+          var row = el('div', 'srow'); row.style.gridTemplateColumns = 'minmax(0,1fr) auto';
+          row.appendChild(el('span', null, (x.title || 'שבת') + ' • כניסה ' + dmy(x.eve) + ' ' + x.candle + ' • יציאה ' + dmy(x.endd) + ' ' + x.havdalah));
+          var d = el('button', 'd', 'מחק'); d.type = 'button';
+          d.addEventListener('click', function(){ sb.from('shabbat_rows').delete().eq('id', x.id).then(function(z){ if(ok(z)) load(); }); });
+          row.appendChild(d); list.appendChild(row);
+        });
+        if(!(r.data || []).length) list.appendChild(el('p', 'note', 'הטבלה ריקה.'));
+      });
+    }
+    load();
+    var f = el('form'), eve = input('date', null), c1 = input('time', null), end = input('date', null), h1 = input('time', null), ti = input('text', null);
+    ti.placeholder = 'פרשת וירא, או: ראש השנה';
+    [['תאריך כניסה', eve], ['שעת כניסה', c1], ['תאריך יציאה', end], ['שעת יציאה', h1]].forEach(function(x){ x[1].required = true; f.appendChild(field(x[0], x[1])); });
+    f.appendChild(field('כותרת', ti));
+    var go = el('button', 'p', 'הוסף שורה'); go.type = 'submit'; f.appendChild(go);
+    f.addEventListener('submit', function(e){
+      e.preventDefault();
+      if(end.value < eve.value){ toast('תאריך היציאה לפני הכניסה'); return; }
+      sb.from('shabbat_rows').insert({client_id:cid, eve:eve.value, candle:c1.value, endd:end.value, havdalah:h1.value, title:ti.value.trim()}).then(function(x){ if(ok(x)){ f.reset(); load(); toast('נוסף'); } });
+    });
+    box.appendChild(f);
+    var csv = el('textarea'); csv.placeholder = '2026-10-23,17:42,2026-10-24,18:32,פרשת לך לך';
+    var cg = el('button', null, 'טען טבלה'); cg.type = 'button';
+    cg.addEventListener('click', function(){
+      var rows = [], bad = 0, D = /^\d{4}-\d{2}-\d{2}$/, T = /^\d{1,2}:\d{2}$/;
+      csv.value.split('\n').forEach(function(line){
+        line = line.trim(); if(!line) return;
+        var p = line.split(/[,;\t]/).map(function(s){ return s.trim(); });
+        if(p.length >= 4 && D.test(p[0]) && T.test(p[1]) && D.test(p[2]) && T.test(p[3]) && p[2] >= p[0]) rows.push({client_id:cid, eve:p[0], candle:('0' + p[1]).slice(-5), endd:p[2], havdalah:('0' + p[3]).slice(-5), title:p[4] || ''});
+        else bad++;
+      });
+      if(!rows.length){ toast('לא נמצאו שורות תקינות. בדקו את סדר העמודות'); return; }
+      sb.from('shabbat_rows').insert(rows).then(function(x){ if(ok(x)){ csv.value = ''; load(); toast('נוספו ' + rows.length + ' שורות' + (bad ? ', ' + bad + ' דולגו' : '')); } });
+    });
+    var w = el('div', 'full'); box.appendChild(el('p', 'note', 'או הדביקו טבלה: תאריך כניסה, שעת כניסה, תאריך יציאה, שעת יציאה, כותרת.')); box.appendChild(csv); box.appendChild(cg);
+    return box;
+  }
+
+  start();
+})();
