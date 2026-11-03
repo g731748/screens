@@ -22,7 +22,9 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
 .shab .t span{font-size:2.6cqw}
 .shab .d{font-size:2.4cqw;opacity:.85}
 #tick{position:fixed;inset:auto 0 0 0;background:var(--teal);color:var(--cream);font-size:2.6cqw;font-weight:700;padding:1cqw 3cqw;display:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:.3cqw solid var(--accent)}
-#msg{position:fixed;inset:0;display:none;place-items:center;text-align:center;color:#fff;background:#000;font-size:4cqw;padding:5cqw}
+#msg{position:fixed;inset:0;display:none;place-items:center;align-content:center;gap:2cqw;text-align:center;color:var(--cream);background:var(--teal);padding:5cqw}
+#msg .mt{font-family:'Secular One','Heebo',sans-serif;font-size:6cqw;color:var(--accent)}
+#msg .ms{font-size:3cqw;opacity:.9}
 </style>
 </head>
 <body>
@@ -37,7 +39,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
   var KEY = 'pd:' + T, data = null, list = [], idx = -1, timer = null;
   function $(i){ return document.getElementById(i); }
   function el(t, c, x){ var e = document.createElement(t); if(c) e.className = c; if(x != null) e.textContent = x; return e; }
-  function say(t){ var m = $('msg'); if(t){ m.textContent = t; m.style.display = 'grid'; } else m.style.display = 'none'; }
+  function say(t, sub){ var m = $('msg'); m.textContent = ''; if(t){ m.appendChild(el('div', 'mt', t)); if(sub) m.appendChild(el('div', 'ms', sub)); m.style.display = 'grid'; } else m.style.display = 'none'; }
 
   function jer(){
     var p = {}, f = new Intl.DateTimeFormat('en-GB', {timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false, weekday:'short'});
@@ -82,6 +84,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
     d.appendChild(inn); return d;
   }
   function imgUrl(p){ return C.url + '/storage/v1/object/public/slides/' + encodeURI(p); }
+  var warmed = {};
+  function prefetch(d){ (d.slides || []).forEach(function(s){ var u = imgUrl(s.path); if(warmed[u]) return; warmed[u] = 1; fetch(u, {mode:'cors'}).catch(function(){ delete warmed[u]; }); }); }
 
   function build(){
     var n = jer(), out = [], sh = activeShabbat(n);
@@ -92,7 +96,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
   function show(){
     var st = $('stage'); clearTimeout(timer);
     list = build();
-    if(!list.length){ st.textContent = ''; timer = setTimeout(show, 15000); return; }
+    if(!list.length){
+      if(!st.querySelector('.idle')){ st.textContent = ''; var d0 = el('div', 'slide shab idle on'), i0 = el('div', 'in'); i0.appendChild(el('h1', null, (data && data.name) || 'ברוכים הבאים')); d0.appendChild(i0); st.appendChild(d0); }
+      timer = setTimeout(show, 15000); return;
+    }
     idx = (idx + 1) % list.length;
     var it = list[idx], node;
     if(it.kind === 'shab') node = shabbatNode(it.r);
@@ -120,14 +127,17 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Heeb
     fetch(C.url + '/rest/v1/rpc/player_data', {method:'POST', headers:{'apikey':C.key, 'Authorization':'Bearer ' + C.key, 'Content-Type':'application/json'}, body:JSON.stringify({p_token:T})})
       .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(function(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} apply(d); })
-      .catch(function(){ if(!data){ try{ var c = localStorage.getItem(KEY); if(c) apply(JSON.parse(c)); else say('אין חיבור ועדיין אין תוכן שמור'); }catch(e){ say('אין חיבור'); } } });
+      .catch(function(){ if(!data){ try{ var c = localStorage.getItem(KEY); if(c) apply(JSON.parse(c)); else { say('מתחבר...', 'ממתין לחיבור לאינטרנט'); setTimeout(pull, 10000); } }catch(e){ say('מתחבר...', 'ממתין לחיבור לאינטרנט'); setTimeout(pull, 10000); } } });
   }
   function apply(d){
     if(!d || !d.ok){ say('קוד מסך לא תקין'); return; }
-    if(d.active === false){ data = d; $('stage').textContent = ''; $('tick').style.display = 'none'; say('המסך אינו פעיל. פנו למיכאל מערכות.'); return; }
-    say(''); var first = !data || !data.slides; data = d; if(first || !timer){ idx = -1; show(); } ticker();
+    if(d.active === false){ data = d; clearTimeout(timer); timer = null; $('stage').textContent = ''; $('tick').style.display = 'none'; say('המסך ממתין לחידוש המנוי', 'לחידוש השירות: מיכאל מערכות, 053-4339050'); return; }
+    say(''); var first = !data || !data.slides; data = d; prefetch(d); if(first || !timer){ idx = -1; show(); } ticker();
   }
   pull(); setInterval(pull, 60000);
+  setInterval(function(){
+    try{ var n = jer(), k = 'reload:' + n.date; if(n.hour === 4 && n.min < 5 && !localStorage.getItem(k)){ localStorage.setItem(k, '1'); location.reload(); } }catch(e){}
+  }, 60000);
   if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
 })();
 </script>
