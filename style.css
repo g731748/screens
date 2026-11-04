@@ -58,3 +58,16 @@ legend{font-weight:700;font-size:13px;padding:0 6px}
 .spark i{display:block;width:4px;border-radius:2px;background:var(--ok)}
 .spark i.x{background:var(--bad)}
 @media(max-width:560px){.kpis{grid-template-columns:minmax(0,1fr)}}
+
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.chip{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:6px 14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tvp{background:#0c1420;border:5px solid #000;border-radius:8px;aspect-ratio:16/9;overflow:hidden;display:grid;place-items:center;margin-bottom:10px;width:100%;max-width:560px}
+.tvp img{width:100%;height:100%;object-fit:contain;display:block}
+.tvp-empty{color:#f4f6fa;opacity:.85;padding:12px;text-align:center;font-size:14px}
+.box input[type=range]{width:100%;max-width:560px;display:block}
+.statusrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 6px}
+.tplcv{width:100%;max-width:560px;height:auto;aspect-ratio:16/9;border-radius:8px;border:1px solid var(--line);display:block;margin:8px 0}
+details summary{cursor:pointer;font-weight:700;margin:6px 0}
+.helpbtn{display:block;text-align:center;text-decoration:none;margin:0 0 24px;padding:14px;border-radius:12px;background:var(--accent);color:#fff;font-weight:800}
+.autofill{border:1px dashed var(--line);border-radius:12px;padding:12px;margin:0 0 14px;display:grid;gap:10px}

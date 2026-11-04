@@ -4,23 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ניהול מסך</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Secular+One&display=swap">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div id="app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<div id="dbg" style="padding:12px;font:14px sans-serif;color:#000;background:#fff3cd;direction:rtl"></div>
-<script>
-window.onerror=function(m,s,l){document.getElementById('dbg').textContent+=' שגיאה: '+m+' ('+String(s).split('/').pop()+' שורה '+l+') ';};
-</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
-<script>
-setTimeout(function(){
-  var d=document.getElementById('dbg');
-  d.textContent+=' | ספרייה: '+(window.supabase?'נטענה':'לא נטענה')+' | הגדרות: '+(window.CONFIG?'נטענו':'לא נטענו')+' | תוכן: '+document.getElementById('app').children.length;
-},1500);
-</script>
+<script src="config.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

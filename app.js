@@ -245,6 +245,64 @@
   }
   function pubUrl(path){ return sb.storage.from('slides').getPublicUrl(path).data.publicUrl; }
 
+  var slideState = {rows:[], draw:null};
+  function onSlides(rows){ slideState.rows = rows; if(slideState.draw) slideState.draw(); }
+  var WHEN = {all:'כל היום', m:'בוקר', n:'צהריים', e:'ערב', f:'שישי בלבד', w:'ימי חול'};
+  function chips(map, initial, onPick){
+    var wrap = el('div', 'chips'), cur = initial, btns = {};
+    Object.keys(map).forEach(function(k){
+      var b = el('button', 'chip', map[k]); b.type = 'button'; b.setAttribute('aria-pressed', k === cur ? 'true' : 'false');
+      b.addEventListener('click', function(){ cur = k; Object.keys(btns).forEach(function(x){ btns[x].setAttribute('aria-pressed', x === k ? 'true' : 'false'); }); if(onPick) onPick(k); });
+      btns[k] = b; wrap.appendChild(b);
+    });
+    return {node:wrap, get:function(){ return cur; }};
+  }
+  function localDate(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+  function shownAt(s, hour, fri){
+    if(!s.enabled) return false;
+    var today = localDate();
+    if(s.from_date && today < s.from_date) return false;
+    if(s.to_date && today > s.to_date) return false;
+    switch(s.period){
+      case 'm': return hour < 12;
+      case 'n': return hour >= 12 && hour < 17;
+      case 'e': return hour >= 17;
+      case 'w': return !fri;
+      case 'f': return fri;
+      default: return true;
+    }
+  }
+
+  function statusRow(cid){
+    var row = el('div', 'statusrow'), pill = el('span', 'pill warn', 'בודק חיבור...'); row.appendChild(pill);
+    sb.from('screens').select('name,last_seen').eq('client_id', cid).then(function(r){
+      var s = r.data && r.data[0];
+      if(!s){ pill.textContent = 'אין מסך מחובר'; return; }
+      var a = agoText(s.last_seen);
+      pill.className = 'pill ' + (a[1] === 'ok' ? 'ok' : 'warn');
+      pill.textContent = a[1] === 'ok' ? 'המסך מחובר' : 'המסך לא מחובר כרגע';
+      if(a[1] !== 'ok') row.appendChild(el('span', 'note', 'בדקו שהמסך דלוק ושיש אינטרנט. אם זה נמשך, פנו אלינו.'));
+    });
+    return row;
+  }
+  function previewBox(){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'מה מוצג במסך'));
+    var tv = el('div', 'tvp'), info = el('p', 'note'), fri = false, now = new Date();
+    var slider = input('range', null, String(Math.min(23, Math.max(5, now.getHours()))));
+    slider.min = 5; slider.max = 23; slider.setAttribute('aria-label', 'שעה ביום');
+    var day = chips({w:'יום חול', f:'שישי'}, 'w', function(k){ fri = (k === 'f'); draw(); });
+    function draw(){
+      var h = +slider.value, list = slideState.rows.filter(function(s){ return shownAt(s, h, fri); });
+      tv.textContent = '';
+      if(!list.length){ tv.appendChild(el('div', 'tvp-empty', slideState.rows.length ? 'בשעה הזו אין תמונה. יוצג מסך עם שם העסק.' : 'עדיין אין תמונות')); }
+      else { var im = el('img'); im.alt = ''; im.src = pubUrl(list[0].image_path); tv.appendChild(im); }
+      info.textContent = 'בשעה ' + h + ':00 ' + (fri ? 'בשישי' : 'ביום חול') + ': ' + (list.length ? list.length + (list.length > 1 ? ' תמונות בסבב' : ' תמונה') : 'אין תמונות');
+    }
+    slideState.draw = draw; slider.addEventListener('input', draw);
+    box.appendChild(tv); box.appendChild(slider); box.appendChild(info); box.appendChild(day.node); draw();
+    return box;
+  }
+
   function renderClient(cid, asAdmin){
     var extra = null;
     if(asAdmin){ extra = el('button', null, 'חזרה לאדמין'); extra.type = 'button'; extra.addEventListener('click', renderAdmin); }
@@ -252,20 +310,28 @@
       if(!ok(r) || !r.data){ shell('ניהול מסך', extra).appendChild(el('p', 'sub', 'לא נמצאו נתוני לקוח.')); return; }
       var c = r.data, m = shell(c.name, extra);
       if(!c.active){ m.appendChild(el('h1', null, 'החשבון מושעה')); m.appendChild(el('p', 'sub', 'פנו למיכאל מערכות להחזרת הגישה.')); return; }
+      slideState = {rows:[], draw:null};
       m.appendChild(el('h1', null, 'התמונות במסך'));
+      m.appendChild(statusRow(cid));
       m.appendChild(el('p', 'sub', 'שינויים מופיעים במסך תוך כדקה.'));
       var mods = c.modules || [];
+      m.appendChild(previewBox());
       var slidesBox = el('div', 'box'); m.appendChild(slidesBox);
-      m.appendChild(uploadBox(cid, function(){ loadSlides(cid, slidesBox); }));
+      var refresh = function(){ loadSlides(cid, slidesBox); };
+      m.appendChild(uploadBox(cid, refresh));
+      m.appendChild(templateBox(cid, c.name, refresh));
       if(mods.indexOf('ticker') > -1) m.appendChild(tickerBox(cid));
       if(mods.indexOf('shabbat') > -1) m.appendChild(shabbatBox(cid));
-      loadSlides(cid, slidesBox);
+      var help = el('a', 'btn p helpbtn', 'שלחו הודעה למיכאל מערכות');
+      help.href = 'https://wa.me/972534339050?text=' + encodeURIComponent('שלום, אני מ' + c.name + ' ומבקש עזרה במסך'); help.target = '_blank'; help.rel = 'noopener';
+      m.appendChild(help);
+      refresh();
     });
   }
   function loadSlides(cid, box){
     sb.from('slides').select('*').eq('client_id', cid).order('position').then(function(r){
       if(!ok(r)) return; box.textContent = '';
-      var rows = r.data || [];
+      var rows = r.data || []; onSlides(rows);
       if(!rows.length){ box.appendChild(el('p', 'note', 'עדיין אין תמונות. העלו את הראשונה למטה.')); return; }
       rows.forEach(function(s, i){
         var row = el('div', 'srow' + (s.enabled ? '' : ' off'));
@@ -305,26 +371,104 @@
       });
     });
   }
+  /* shared: resize/upload a picture and add it to the screen list */
+  function addSlide(cid, blob, meta){
+    var path = cid + '/' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + '.jpg';
+    return sb.storage.from('slides').upload(path, blob, {contentType:'image/jpeg'}).then(function(u){
+      if(u.error) throw u.error;
+      return sb.from('slides').select('position').eq('client_id', cid).order('position', {ascending:false}).limit(1);
+    }).then(function(p){
+      var next = p.data && p.data[0] ? p.data[0].position + 1 : 0;
+      return sb.from('slides').insert({client_id:cid, image_path:path, title:meta.title || null, period:meta.period || 'all', from_date:meta.from || null, to_date:meta.to || null, dur:Math.max(3, Math.min(60, +meta.dur || 8)), position:next});
+    }).then(function(x){ if(x.error) throw x.error; });
+  }
   function uploadBox(cid, done){
     var box = el('div', 'box'); box.appendChild(el('h2', null, 'העלאת תמונה'));
     var f = el('form'), file = input('file', null); file.accept = 'image/*'; file.required = true;
-    var ti = input('text', null), pe = select(PERIODS), fr = input('date', null), to = input('date', null), du = input('number', null, 8); du.min = 3; du.max = 60;
-    f.appendChild(field('תמונה', file)); f.appendChild(field('כותרת (לא מוצגת במסך)', ti)); f.appendChild(field('מתי מוצגת', pe));
-    f.appendChild(field('מתאריך', fr)); f.appendChild(field('עד תאריך', to)); f.appendChild(field('שניות', du));
+    f.appendChild(field('תמונה', file, 'full'));
+    var when = chips(WHEN, 'all'), wl = el('div', 'full'); wl.appendChild(el('b', null, 'מתי להציג')); wl.appendChild(when.node); f.appendChild(wl);
+    var det = el('details', 'full'); det.appendChild(el('summary', null, 'אפשרויות מתקדמות'));
+    var ti = input('text', null), fr = input('date', null), to = input('date', null), du = input('number', null, 8); du.min = 3; du.max = 60;
+    det.appendChild(field('כותרת (לא מוצגת במסך)', ti)); det.appendChild(field('מתאריך', fr)); det.appendChild(field('עד תאריך', to)); det.appendChild(field('שניות על המסך', du)); f.appendChild(det);
     var go = el('button', 'p', 'העלה'); go.type = 'submit'; f.appendChild(go);
     f.addEventListener('submit', function(e){
       e.preventDefault(); if(!file.files[0]) return; go.disabled = true; go.textContent = 'מעלה...';
-      var path = cid + '/' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + '.jpg';
-      resize(file.files[0], 1920).then(function(blob){ return sb.storage.from('slides').upload(path, blob, {contentType:'image/jpeg'}); }).then(function(u){
-        if(u.error) throw u.error;
-        return sb.from('slides').select('position').eq('client_id', cid).order('position', {ascending:false}).limit(1);
-      }).then(function(p){
-        var next = p.data && p.data[0] ? p.data[0].position + 1 : 0;
-        return sb.from('slides').insert({client_id:cid, image_path:path, title:ti.value.trim() || null, period:pe.value, from_date:nul(fr.value), to_date:nul(to.value), dur:Math.max(3, Math.min(60, +du.value || 8)), position:next});
-      }).then(function(x){
-        go.disabled = false; go.textContent = 'העלה';
-        if(ok(x)){ toast('התמונה עלתה'); f.reset(); du.value = 8; done(); }
+      resize(file.files[0], 1920).then(function(blob){ return addSlide(cid, blob, {title:ti.value.trim(), period:when.get(), from:nul(fr.value), to:nul(to.value), dur:du.value}); }).then(function(){
+        go.disabled = false; go.textContent = 'העלה'; toast('התמונה עלתה'); f.reset(); du.value = 8; done();
       }).catch(function(err){ go.disabled = false; go.textContent = 'העלה'; toast('שגיאה: ' + err.message); });
+    });
+    box.appendChild(f); return box;
+  }
+
+  /* ---------- pictures from templates ---------- */
+  var TPLS = {sale:'מבצע', menu:'תפריט', notice:'הודעה'};
+  var COLORS = {amber:['#a33a12', '#e8873a', 'כתום'], blue:['#14305f', '#3b6fd0', 'כחול'], green:['#17463a', '#3d9a78', 'ירוק'], wine:['#5a1830', '#c04a6a', 'בורדו'], dark:['#10161f', '#2c3a52', 'כהה']};
+  function wrapLines(ctx, text, maxW){
+    var out = [];
+    String(text || '').split('\n').forEach(function(par){
+      var words = par.split(/\s+/).filter(Boolean), line = '';
+      if(!words.length){ out.push(''); return; }
+      words.forEach(function(w){ var t = line ? line + ' ' + w : w; if(ctx.measureText(t).width > maxW && line){ out.push(line); line = w; } else line = t; });
+      out.push(line);
+    });
+    return out;
+  }
+  function drawTemplate(cv, tpl, col, title, body, brand){
+    var W = 1920, H = 1080, ctx = cv.getContext('2d'), pal = COLORS[col] || COLORS.amber;
+    cv.width = W; cv.height = H;
+    var g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, pal[0]); g.addColorStop(1, pal[1]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.direction = 'rtl'; ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
+    var F = "'Heebo','Arial',sans-serif";
+    if(tpl === 'menu'){
+      ctx.textAlign = 'center'; ctx.font = '800 120px ' + F;
+      ctx.fillText(title || 'תפריט', W / 2, 190);
+      ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(W / 2 - 160, 225, 320, 6); ctx.fillStyle = '#fff';
+      var lines = String(body || '').split('\n').filter(function(x){ return x.trim(); }).slice(0, 7), y = 350, step = Math.min(110, 640 / Math.max(lines.length, 1));
+      ctx.font = '600 64px ' + F;
+      lines.forEach(function(l){
+        var p = l.split(/\s*[|\-:]\s*/), name = p[0], price = p[1] || '';
+        ctx.textAlign = 'right'; ctx.fillText(name, W - 220, y);
+        if(price){ ctx.textAlign = 'left'; ctx.fillText(price, 220, y); }
+        y += step;
+      });
+    } else {
+      var big = tpl === 'sale' ? 190 : 130, small = tpl === 'sale' ? 84 : 66;
+      ctx.textAlign = 'center'; ctx.font = '800 ' + big + 'px ' + F;
+      var tl = wrapLines(ctx, title || (tpl === 'sale' ? 'מבצע מיוחד' : 'הודעה חשובה'), W - 320), lh = big * 1.1;
+      ctx.font = '500 ' + small + 'px ' + F; var bl = wrapLines(ctx, body, W - 360), sh = small * 1.35;
+      var total = tl.length * lh + (bl.length && body ? 50 + bl.length * sh : 0), y0 = (H - total) / 2 + big * 0.85;
+      ctx.font = '800 ' + big + 'px ' + F; tl.forEach(function(l, i){ ctx.fillText(l, W / 2, y0 + i * lh); });
+      if(body){ ctx.font = '500 ' + small + 'px ' + F; var y1 = y0 + (tl.length - 1) * lh + 50 + small; bl.forEach(function(l, i){ ctx.fillText(l, W / 2, y1 + i * sh); }); }
+    }
+    ctx.textAlign = 'center'; ctx.font = '500 44px ' + F; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText(brand || '', W / 2, H - 56);
+  }
+  function templateBox(cid, brand, done){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'יצירת תמונה מתבנית'));
+    box.appendChild(el('p', 'note', 'אין לכם תמונה מוכנה? כתבו טקסט, בחרו תבנית וצבע, והתמונה נוצרת לבד.'));
+    var f = el('form'), st = {tpl:'sale', col:'amber'};
+    var tp = chips(TPLS, 'sale', function(k){ st.tpl = k; hint(); paint(); });
+    var cl = chips(Object.keys(COLORS).reduce(function(o, k){ o[k] = COLORS[k][2]; return o; }, {}), 'amber', function(k){ st.col = k; paint(); });
+    var tl = el('div', 'full'); tl.appendChild(el('b', null, 'תבנית')); tl.appendChild(tp.node); f.appendChild(tl);
+    var cc = el('div', 'full'); cc.appendChild(el('b', null, 'צבע')); cc.appendChild(cl.node); f.appendChild(cc);
+    var ti = input('text', null); ti.maxLength = 60; var body = el('textarea'); body.rows = 4;
+    var bl = field('טקסט', body, 'full'), bt = bl.firstChild;
+    function hint(){ body.placeholder = st.tpl === 'menu' ? 'שורה לכל מנה: שם | מחיר\nבורקס | 12\nקפה | 8' : 'שורה נוספת (לא חובה)'; bt.textContent = st.tpl === 'menu' ? 'מנות ומחירים' : 'טקסט משני'; }
+    f.appendChild(field('כותרת', ti, 'full')); f.appendChild(bl); hint();
+    var cv = el('canvas', 'tplcv'); f.appendChild(cv);
+    var when = chips(WHEN, 'all'), wl = el('div', 'full'); wl.appendChild(el('b', null, 'מתי להציג')); wl.appendChild(when.node); f.appendChild(wl);
+    function paint(){ drawTemplate(cv, st.tpl, st.col, ti.value.trim(), body.value, brand); }
+    ti.addEventListener('input', paint); body.addEventListener('input', paint); paint();
+    if(document.fonts && document.fonts.load){ Promise.all([document.fonts.load("800 100px Heebo"), document.fonts.load("500 60px Heebo")]).then(paint).catch(function(){}); }
+    var go = el('button', 'p', 'הוסף למסך'); go.type = 'submit'; f.appendChild(go);
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); go.disabled = true; go.textContent = 'מוסיף...'; paint();
+      cv.toBlob(function(blob){
+        if(!blob){ go.disabled = false; go.textContent = 'הוסף למסך'; toast('יצירת התמונה נכשלה'); return; }
+        addSlide(cid, blob, {title:ti.value.trim() || TPLS[st.tpl], period:when.get(), dur:8}).then(function(){
+          go.disabled = false; go.textContent = 'הוסף למסך'; toast('התמונה נוספה למסך'); ti.value = ''; body.value = ''; paint(); done();
+        }).catch(function(err){ go.disabled = false; go.textContent = 'הוסף למסך'; toast('שגיאה: ' + err.message); });
+      }, 'image/jpeg', 0.9);
     });
     box.appendChild(f); return box;
   }
@@ -362,6 +506,47 @@
       });
     }
     load();
+    var CITIES = {'295530':'באר שבע', '281184':'ירושלים', '293397':'תל אביב', '294801':'חיפה'};
+    var af = el('div', 'autofill'); af.appendChild(el('b', null, 'מילוי אוטומטי'));
+    var city = select(CITIES, '295530'), mins = input('number', null, 20); mins.min = 0; mins.max = 60;
+    af.appendChild(field('עיר', city)); af.appendChild(field('דקות לפני השקיעה להדלקת נרות', mins));
+    var ab = el('button', 'p', 'מלא את השבתות והחגים הקרובים'); ab.type = 'button'; af.appendChild(ab);
+    af.appendChild(el('p', 'note full', 'הזמנים נמשכים מ-Hebcal.com ונשמרים אצלנו. אפשר לתקן או למחוק שורה בכל שלב.'));
+    box.appendChild(af);
+    function stripNikud(s){ return String(s || '').replace(/[֑-ׇ]/g, ''); }
+    function hebcalUrl(year, geo, b){ return 'https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=' + year + '&month=x&ss=off&mf=off&c=on&geo=geoname&geonameid=' + geo + '&M=on&s=on&i=on&b=' + b; }
+    function buildRows(items, today, limitDate){
+      items = items.slice().sort(function(x, y){ return String(x.date) < String(y.date) ? -1 : 1; });
+      var rows = [], open = null;
+      items.forEach(function(it){
+        var d = String(it.date).slice(0, 10), t = String(it.date).slice(11, 16);
+        if(it.category === 'candles' && !open && t){ open = {eve:d, candle:t}; }
+        else if(it.category === 'havdalah' && open && t){ open.endd = d; open.havdalah = t; rows.push(open); open = null; }
+      });
+      rows.forEach(function(r){
+        var hol = items.filter(function(it){ var d = String(it.date).slice(0, 10); return it.category === 'holiday' && d >= r.eve && d <= r.endd; });
+        var nameOf = function(it){ return stripNikud(it.hebrew || it.title); };
+        var real = hol.filter(function(it){ return !/^ערב /.test(nameOf(it)); })[0];
+        var par = items.filter(function(it){ return it.category === 'parashat' && String(it.date).slice(0, 10) === r.endd; })[0];
+        r.title = real ? nameOf(real) : (par ? nameOf(par) : '');
+      });
+      return rows.filter(function(r){ return r.endd >= today && r.eve <= limitDate; });
+    }
+    ab.addEventListener('click', function(){
+      ab.disabled = true; ab.textContent = 'טוען...';
+      var y = new Date().getFullYear(), geo = city.value, b = Math.max(0, Math.min(60, +mins.value || 20));
+      var lim = new Date(Date.now() + 70 * 86400000), limIso = lim.getFullYear() + '-' + ('0' + (lim.getMonth() + 1)).slice(-2) + '-' + ('0' + lim.getDate()).slice(-2);
+      Promise.all([y, y + 1].map(function(yy){ return fetch(hebcalUrl(yy, geo, b)).then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); }); })).then(function(res){
+        var items = [].concat(res[0].items || [], res[1].items || []), rows = buildRows(items, localDate(), limIso);
+        if(!rows.length) throw new Error('לא התקבלו זמנים');
+        return sb.from('shabbat_rows').select('eve').eq('client_id', cid).then(function(ex){
+          var have = {}; (ex.data || []).forEach(function(x){ have[x.eve] = 1; });
+          var fresh = rows.filter(function(r){ return !have[r.eve]; }).map(function(r){ return {client_id:cid, eve:r.eve, candle:r.candle, endd:r.endd, havdalah:r.havdalah, title:r.title}; });
+          if(!fresh.length){ toast('הכול כבר מעודכן'); return; }
+          return sb.from('shabbat_rows').insert(fresh).then(function(x){ if(ok(x)){ load(); toast('נוספו ' + fresh.length + ' שורות'); } });
+        });
+      }).catch(function(err){ toast('לא הצלחתי למשוך זמנים (' + err.message + '). אפשר להזין ידנית.'); }).then(function(){ ab.disabled = false; ab.textContent = 'מלא את השבתות והחגים הקרובים'; });
+    });
     var f = el('form'), eve = input('date', null), c1 = input('time', null), end = input('date', null), h1 = input('time', null), ti = input('text', null);
     ti.placeholder = 'פרשת וירא, או: ראש השנה';
     [['תאריך כניסה', eve], ['שעת כניסה', c1], ['תאריך יציאה', end], ['שעת יציאה', h1]].forEach(function(x){ x[1].required = true; f.appendChild(field(x[0], x[1])); });
