@@ -262,7 +262,7 @@
       b.addEventListener('click', function(){ cur = k; Object.keys(btns).forEach(function(x){ btns[x].setAttribute('aria-pressed', x === k ? 'true' : 'false'); }); if(onPick) onPick(k); });
       btns[k] = b; wrap.appendChild(b);
     });
-    return {node:wrap, get:function(){ return cur; }};
+    return {node:wrap, get:function(){ return cur; }, set:function(k){ cur = k; Object.keys(btns).forEach(function(x){ btns[x].setAttribute('aria-pressed', x === k ? 'true' : 'false'); }); }};
   }
   function localDate(){ var d = new Date(), p = function(n){ return ('0' + n).slice(-2); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
   function shownAt(s, hour, fri){
@@ -328,6 +328,8 @@
       var ed = el('div', 'box'); ed.appendChild(el('h2', null, 'עורך עיצוב מלא'));
       ed.appendChild(el('p', 'note', 'רקעים מגלריה, טקסט חופשי, תמונות, גרירה, הגדלה וסיבוב, בדומה לקנבה.'));
       var eb = el('a', 'btn p', 'פתח את העורך'); eb.href = 'editor.html?c=' + encodeURIComponent(cid); ed.appendChild(eb); m.appendChild(ed);
+      m.appendChild(urgentBox(cid));
+      m.appendChild(displayBox(cid));
       m.appendChild(uploadBox(cid, refresh));
       m.appendChild(templateBox(cid, c.name, refresh));
       if(mods.indexOf('ticker') > -1) m.appendChild(tickerBox(cid));
@@ -408,6 +410,65 @@
       }).catch(function(err){ go.disabled = false; go.textContent = 'העלה'; toast('שגיאה: ' + err.message); });
     });
     box.appendChild(f); return box;
+  }
+
+
+  /* ---------- screen layout + urgent notice ---------- */
+  var ACCENTS = ['#6c93ff', '#e8873a', '#3d9a78', '#d0647f', '#7a5acd', '#f2c14e'];
+  function displayBox(cid){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'תצוגת המסך'));
+    var f = el('form'), st = {layout:'full', accent:ACCENTS[0], transition:'fade'};
+    var lay = chips({full:'מסך מלא', split:'מחולק: תמונה + פס צד'}, 'full', function(k){ st.layout = k; });
+    var fx = chips({fade:'דהייה', slide:'החלקה', zoom:'זום עדין'}, 'fade', function(k){ st.transition = k; });
+    var l1 = el('div', 'full'); l1.appendChild(el('b', null, 'פריסה')); l1.appendChild(lay.node); f.appendChild(l1);
+    f.appendChild(el('p', 'note full', 'במסך המחולק מוצגים בצד שעון, תאריך עברי וזמני שבת, והתמונות בצד השני.'));
+    var l2 = el('div', 'full'); l2.appendChild(el('b', null, 'מעבר בין תמונות')); l2.appendChild(fx.node); f.appendChild(l2);
+    var l3 = el('div', 'full'); l3.appendChild(el('b', null, 'צבע העסק')); var sw = el('div', 'chips');
+    ACCENTS.forEach(function(c){ var b = el('button', 'chip', ''); b.type = 'button'; b.style.cssText = 'width:34px;height:34px;padding:0;border-radius:50%;background:' + c; b.setAttribute('aria-label', 'צבע ' + c);
+      b.addEventListener('click', function(){ st.accent = c; Array.prototype.forEach.call(sw.children, function(x){ x.style.outline = x === b ? '3px solid currentColor' : 'none'; }); }); sw.appendChild(b); });
+    l3.appendChild(sw); f.appendChild(l3);
+    var go = el('button', 'p', 'שמור'); go.type = 'submit'; f.appendChild(go);
+    sb.from('client_display').select('*').eq('client_id', cid).maybeSingle().then(function(r){
+      if(r.data){ st = {layout:r.data.layout, accent:r.data.accent, transition:r.data.transition}; lay.set(st.layout); fx.set(st.transition); Array.prototype.forEach.call(sw.children, function(x, i){ x.style.outline = ACCENTS[i] === st.accent ? '3px solid currentColor' : 'none'; }); }
+      else sw.children[0].style.outline = '3px solid currentColor';
+    });
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); go.disabled = true;
+      sb.from('client_display').upsert({client_id:cid, layout:st.layout, accent:st.accent, transition:st.transition, updated_at:new Date().toISOString()}).then(function(r){ go.disabled = false; if(ok(r)) toast('נשמר. יופיע במסך תוך כחצי דקה'); });
+    });
+    box.appendChild(f); return box;
+  }
+  var URG_FOR = {'1':'שעה', '3':'3 שעות', 'day':'עד סוף היום', 'none':'עד שאבטל'};
+  function urgentBox(cid){
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'הודעה דחופה'));
+    box.appendChild(el('p', 'note', 'תופסת את כל המסך מיד, באדום, ומחליפה את כל מה שמוצג.'));
+    var state = el('div', 'note'), f = el('form'), ti = input('text', null); ti.maxLength = 80; ti.required = true;
+    var body = el('textarea'); body.rows = 2; body.maxLength = 300;
+    var du = select(URG_FOR, '3');
+    f.appendChild(field('כותרת', ti, 'full')); f.appendChild(field('פירוט (לא חובה)', body, 'full')); f.appendChild(field('להציג למשך', du, 'full'));
+    var go = el('button', 'p', 'הצג עכשיו במסך'); go.type = 'submit'; var off = el('button', null, 'בטל הודעה'); off.type = 'button'; off.style.display = 'none';
+    f.appendChild(go); f.appendChild(off); box.appendChild(state); box.appendChild(f);
+    function paint(){
+      sb.from('urgent_notice').select('*').eq('client_id', cid).maybeSingle().then(function(r){
+        var u = r.data, live = u && (!u.until_at || new Date(u.until_at) > new Date());
+        state.textContent = live ? 'פעילה כעת במסך: ' + u.title + (u.until_at ? ' (עד ' + new Date(u.until_at).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}) + ')' : '') : '';
+        off.style.display = live ? '' : 'none';
+      });
+    }
+    function until(v){
+      var d = new Date();
+      if(v === 'none') return null;
+      if(v === 'day'){ d.setHours(23, 59, 0, 0); return d.toISOString(); }
+      return new Date(Date.now() + (+v) * 3600000).toISOString();
+    }
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); go.disabled = true;
+      sb.from('urgent_notice').upsert({client_id:cid, title:ti.value.trim(), body:body.value.trim() || null, until_at:until(du.value), created_at:new Date().toISOString()}).then(function(r){
+        go.disabled = false; if(ok(r)){ toast('ההודעה נשלחה. תופיע במסך תוך כחצי דקה'); ti.value = ''; body.value = ''; paint(); }
+      });
+    });
+    off.addEventListener('click', function(){ sb.from('urgent_notice').delete().eq('client_id', cid).then(function(r){ if(ok(r)){ toast('ההודעה בוטלה. המסך יחזור לשגרה תוך כחצי דקה'); paint(); } }); });
+    paint(); return box;
   }
 
   /* ---------- pictures from templates ---------- */
