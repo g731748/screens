@@ -318,6 +318,9 @@
       m.appendChild(previewBox());
       var slidesBox = el('div', 'box'); m.appendChild(slidesBox);
       var refresh = function(){ loadSlides(cid, slidesBox); };
+      var ed = el('div', 'box'); ed.appendChild(el('h2', null, 'עורך עיצוב מלא'));
+      ed.appendChild(el('p', 'note', 'רקעים מגלריה, טקסט חופשי, תמונות, גרירה, הגדלה וסיבוב, בדומה לקנבה.'));
+      var eb = el('a', 'btn p', 'פתח את העורך'); eb.href = 'editor.html?c=' + encodeURIComponent(cid); ed.appendChild(eb); m.appendChild(ed);
       m.appendChild(uploadBox(cid, refresh));
       m.appendChild(templateBox(cid, c.name, refresh));
       if(mods.indexOf('ticker') > -1) m.appendChild(tickerBox(cid));

@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>עורך תמונה למסך</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alef:wght@400;700&family=Assistant:wght@400;700;800&family=Frank+Ruhl+Libre:wght@400;700;900&family=Heebo:wght@400;500;700;800&family=Rubik:wght@400;500;700&family=Secular+One&family=Suez+One&family=Varela+Round&display=swap">
+<style>
+/* Layout: top bar, left tool rail with panel, center 16:9 stage, right properties panel. Under 900px it stacks: stage first, tool tabs, then panels. */
+:root{--bg:#e9edf3;--panel:#ffffff;--ink:#14202e;--mute:#5a6878;--line:#d9e0e8;--brand:#1f4fd8;--onbrand:#ffffff;--soft:#e6ecf6;--danger:#b3261e;--stagebg:#cfd6e0;
+  --display:'Rubik','Heebo',sans-serif;--body:'Heebo',system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d141d;--panel:#16202c;--ink:#e8edf3;--mute:#9aa8b8;--line:#263344;--brand:#6c93ff;--onbrand:#0b1220;--soft:#1d2a3a;--danger:#ff8f86;--stagebg:#0a1018;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d141d;--panel:#16202c;--ink:#e8edf3;--mute:#9aa8b8;--line:#263344;--brand:#6c93ff;--onbrand:#0b1220;--soft:#1d2a3a;--danger:#ff8f86;--stagebg:#0a1018;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.4;padding-block:12px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+button{font:inherit;cursor:pointer;color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.app{max-width:1280px;margin:0 auto;display:grid;gap:10px}
+.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.top h1{font-family:var(--display);font-size:16px;margin:0;margin-inline-end:auto}
+.btn{border:1.5px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 12px;font-weight:700;font-size:13px;white-space:nowrap}
+.btn.p{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
+.btn.sm{padding:5px 9px;font-size:12px}
+.btn[aria-pressed="true"],.btn.on{background:var(--soft);border-color:var(--brand)}
+.btn[disabled]{opacity:.4;cursor:default}
+.main{display:grid;grid-template-columns:230px minmax(0,1fr) 270px;gap:10px;align-items:start}
+@media(max-width:1000px){.main{grid-template-columns:minmax(0,1fr)}.left{order:2}.center{order:1}.right{order:3}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tabs button{flex:1 1 auto;border:1.5px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;font-weight:700;font-size:12px}
+.tabs button[aria-selected="true"]{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
+h3{font-size:12px;margin:12px 0 6px;color:var(--mute);font-weight:800}
+h3:first-child{margin-top:0}
+.stagewrap{background:var(--stagebg);border-radius:12px;padding:10px}
+.stage{position:relative;width:100%;aspect-ratio:16/9;direction:ltr;overflow:hidden;border-radius:4px;background:#000;touch-action:none;user-select:none;-webkit-user-select:none}
+.cv{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden}
+.bgl,.ovl{position:absolute;inset:0}
+.el{position:absolute;touch-action:none;cursor:move}
+.el.sel{outline:3px solid #3b82f6;outline-offset:0}
+.el .tx{width:100%;white-space:pre-wrap;word-break:break-word;outline:none}
+.el img{width:100%;height:100%;display:block;pointer-events:none}
+.h{position:absolute;width:34px;height:34px;background:#fff;border:4px solid #3b82f6;border-radius:50%;touch-action:none}
+.h.nw{left:-17px;top:-17px;cursor:nwse-resize}.h.ne{right:-17px;top:-17px;cursor:nesw-resize}
+.h.sw{left:-17px;bottom:-17px;cursor:nesw-resize}.h.se{right:-17px;bottom:-17px;cursor:nwse-resize}
+.h.e{right:-17px;top:calc(50% - 17px);border-radius:10px;width:24px;cursor:ew-resize}.h.w{left:-17px;top:calc(50% - 17px);border-radius:10px;width:24px;cursor:ew-resize}
+.rot{position:absolute;left:calc(50% - 17px);top:-80px;width:34px;height:34px;background:#3b82f6;border-radius:50%;cursor:grab;touch-action:none}
+.rot::after{content:"";position:absolute;left:15px;top:34px;width:4px;height:46px;background:#3b82f6}
+.guide{position:absolute;background:#ff3b9a;pointer-events:none;display:none}
+.guide.v{width:3px;top:0;bottom:0}.guide.hz{height:3px;left:0;right:0}
+.safe{position:absolute;inset:54px 96px;border:3px dashed #ffffffaa;pointer-events:none;display:none}
+.grid{position:absolute;inset:0;pointer-events:none;display:none;background-image:linear-gradient(#ffffff22 2px,transparent 2px),linear-gradient(90deg,#ffffff22 2px,transparent 2px);background-size:120px 120px}
+.preview .h,.preview .rot{display:none}.preview .el.sel{outline:none}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.thumb{border:2px solid var(--line);border-radius:8px;overflow:hidden;padding:0;background:#000;aspect-ratio:16/9;position:relative;min-width:0}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb span{position:absolute;inset:auto 0 0 0;background:#000a;color:#fff;font-size:10px;padding:1px 4px;text-align:center}
+.thumb.on{border-color:var(--brand)}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);padding:0}
+.sw.on{outline:3px solid var(--brand);outline-offset:1px}
+label.f{display:grid;gap:3px;font-size:12px;font-weight:700;color:var(--mute);min-width:0}
+label.f.inl{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}
+select,input[type=number],input[type=text],textarea{font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);min-width:0;width:100%}
+input[type=range]{width:100%;accent-color:var(--brand)}
+input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line);border-radius:8px;background:var(--panel)}
+.note{font-size:12px;color:var(--mute)}
+.badge{font-size:11px;font-weight:800;background:var(--soft);color:var(--brand);border-radius:99px;padding:1px 8px}
+.sheet{position:fixed;inset:0;background:#0008;display:none;place-items:center;padding:16px;z-index:20}
+.sheet.show{display:grid}
+.sheet .box{background:var(--panel);border-radius:14px;padding:16px;width:min(420px,100%);display:grid;gap:10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1.5px solid var(--line);background:var(--panel);border-radius:99px;padding:5px 12px;font-size:13px;font-weight:700}
+.chip[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
+#toast{position:fixed;inset-inline:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));margin:auto;width:max-content;max-width:90%;background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30}
+#toast.show{opacity:1}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+
+</head><body>
+<div class="app" dir="rtl" lang="he">
+  <div class="top">
+    <h1>עורך תמונה למסך</h1>
+    <a class="btn" id="back" href="index.html">חזרה לניהול</a>
+    <button class="btn" id="undo" type="button">בטל</button>
+    <button class="btn" id="redo" type="button">חזור</button>
+    <button class="btn" id="tglGrid" type="button" aria-pressed="false">רשת</button>
+    <button class="btn" id="tglSafe" type="button" aria-pressed="false">שוליים בטוחים</button>
+    <button class="btn" id="tglPrev" type="button" aria-pressed="false">תצוגה כמו בטלוויזיה</button>
+    <button class="btn p" id="addToScreen" type="button">הוסף למסך</button>
+  </div>
+  <div class="main">
+    <div class="card left">
+      <div class="tabs" id="ltabs" role="tablist">
+        <button role="tab" data-t="bg" aria-selected="true">רקע</button>
+        <button role="tab" data-t="text" aria-selected="false">טקסט</button>
+        <button role="tab" data-t="img" aria-selected="false">תמונות</button>
+        <button role="tab" data-t="shape" aria-selected="false">צורות</button>
+        <button role="tab" data-t="tpl" aria-selected="false">תבניות</button>
+      </div>
+      <div id="lpanel"></div>
+    </div>
+    <div class="center">
+      <div class="stagewrap">
+        <div class="stage" id="stage">
+          <div class="cv" id="cv">
+            <div class="bgl" id="bgl"></div><div class="ovl" id="ovl"></div>
+            <div id="els"></div>
+            <div class="grid" id="gridL"></div><div class="safe" id="safeL"></div>
+            <div class="guide v" id="gv"></div><div class="guide hz" id="gh"></div>
+          </div>
+        </div>
+      </div>
+      <p class="note" style="margin:6px 4px 0">לחיצה כפולה על טקסט לעריכה. גררו כדי להזיז, פינות להגדלה, העיגול העליון לסיבוב. מקשי החצים מזיזים בעדינות.</p>
+    </div>
+    <div class="card right" id="props"></div>
+  </div>
+</div>
+<div class="sheet" id="sheet"><div class="box">
+  <b style="font-size:16px">הוספה למסך</b>
+  <div><b>מתי להציג</b><div class="chips" id="whenChips"></div></div>
+  <label class="f">שניות על המסך<input type="number" id="durIn" value="8" min="3" max="60"></label>
+  <div class="row"><button class="btn p" id="sheetOk" type="button">הוסף</button><button class="btn" id="sheetNo" type="button">ביטול</button></div>
+</div></div>
+<div id="toast" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js?v=12"></script>
+<script>
+(function(){
+  function $(s,r){return (r||document).querySelector(s)}
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+  var tm=null;function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tm);tm=setTimeout(function(){t.classList.remove('show')},2400)}
+  var W=1920,H=1080,uid=1;
+  var FONTS={Heebo:'Heebo',Rubik:'Rubik','Secular One':'Secular One',Assistant:'Assistant',Alef:'Alef','Frank Ruhl Libre':'מסורתי: Frank Ruhl','Suez One':'כותרת: Suez One','Varela Round':'עגול: Varela'};
+  var SW=['#ffffff','#14202e','#c4560a','#e8873a','#f2c14e','#3d9a78','#1f4fd8','#6c93ff','#7a1f3d','#d0647f','#7a5acd','#101010'];
+  var GRADS=[['#14305f','#2b5bb3'],['#a33a12','#e8873a'],['#17463a','#3d9a78'],['#5a1830','#c04a6a'],['#2c2c54','#6a5acd'],['#10161f','#2c3a52'],['#7a4a1a','#e8c07a'],['#0b6b7a','#6ad0c4']];
+
+  /* sample picture gallery, drawn as SVG (stand-ins for real photos) */
+  function svgPic(a,b,kind){
+    var s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+a+'"/><stop offset="1" stop-color="'+b+'"/></linearGradient></defs><rect width="1920" height="1080" fill="url(#g)"/>';
+    if(kind==='sun')s+='<circle cx="1400" cy="420" r="190" fill="#fff6" /><path d="M0 820 Q480 640 960 790 T1920 760 V1080 H0Z" fill="#0004"/><path d="M0 930 Q520 780 1000 900 T1920 880 V1080 H0Z" fill="#0006"/>';
+    if(kind==='city')s+='<g fill="#0005"><rect x="120" y="500" width="220" height="580"/><rect x="380" y="320" width="260" height="760"/><rect x="680" y="580" width="200" height="500"/><rect x="920" y="420" width="300" height="660"/><rect x="1260" y="560" width="240" height="520"/><rect x="1540" y="360" width="280" height="720"/></g>';
+    if(kind==='stars')for(var i=0;i<40;i++){s+='<circle cx="'+((i*389)%1920)+'" cy="'+((i*197)%700)+'" r="'+(3+(i%4)*3)+'" fill="#fff9"/>'}
+    if(kind==='wave')s+='<path d="M0 700 Q240 600 480 700 T960 700 T1440 700 T1920 700 V1080 H0Z" fill="#fff3"/><path d="M0 820 Q240 720 480 820 T960 820 T1440 820 T1920 820 V1080 H0Z" fill="#fff4"/>';
+    if(kind==='dots')for(var j=0;j<60;j++){s+='<circle cx="'+((j*313)%1920)+'" cy="'+((j*211)%1080)+'" r="'+(20+(j%5)*14)+'" fill="#fff2"/>'}
+    return 'data:image/svg+xml;utf8,'+encodeURIComponent(s+'</svg>');
+  }
+  var GAL=[['בוקר',svgPic('#f6c177','#e8873a','sun'),'sun'],['עיר',svgPic('#1b3b5e','#4a86d0','city'),'city'],['לילה',svgPic('#0b1220','#2c2c54','stars'),'stars'],['ים',svgPic('#0b6b7a','#6ad0c4','wave'),'wave'],['ורוד',svgPic('#7a1f3d','#e8a0b4','dots'),'dots'],['ירוק',svgPic('#17463a','#9ad0b0','sun'),'sun'],['קפה',svgPic('#3d2b1a','#c98b3c','dots'),'dots'],['שמיים',svgPic('#2b5bb3','#cfe3ff','wave'),'wave']];
+
+  /* ---------- state ---------- */
+  var S={bg:{type:'gradient',a:'#14305f',b:'#2b5bb3',color:'#14305f',src:'',overlay:0,blur:0},els:[],sel:null};
+  var hist=[],hi=-1;
+  function snap(){return JSON.stringify({bg:S.bg,els:S.els})}
+  function commit(){hist=hist.slice(0,hi+1);hist.push(snap());if(hist.length>60)hist.shift();hi=hist.length-1;syncHist()}
+  function restore(j){var o=JSON.parse(j);S.bg=o.bg;S.els=o.els;if(!S.els.some(function(e){return e.id===S.sel}))S.sel=null;render();drawProps()}
+  function syncHist(){$('#undo').disabled=hi<=0;$('#redo').disabled=hi>=hist.length-1}
+  $('#undo').addEventListener('click',function(){if(hi>0){hi--;restore(hist[hi]);syncHist()}});
+  $('#redo').addEventListener('click',function(){if(hi<hist.length-1){hi++;restore(hist[hi]);syncHist()}});
+  function cur(){return S.els.filter(function(e){return e.id===S.sel})[0]}
+
+  /* ---------- element factories ---------- */
+  function newText(txt,o){var e={id:uid++,type:'text',text:txt,x:260,y:380,w:1400,fs:110,fw:700,it:false,ul:false,color:'#ffffff',align:'center',lh:1.15,ls:0,font:'Heebo',shadow:false,op:1,bgOn:false,bgColor:'#000000',pad:24,radius:16,rot:0};for(var k in o)e[k]=o[k];return e}
+  function newImg(src,o){var e={id:uid++,type:'image',src:src,x:560,y:240,w:800,h:600,op:1,radius:0,flip:false,bright:100,fit:'cover',rot:0};for(var k in o)e[k]=o[k];return e}
+  function newShape(shape,o){var e={id:uid++,type:'shape',shape:shape,x:760,y:400,w:400,h:280,fill:'#f2c14e',op:1,radius:shape==='rect'?24:0,rot:0};if(shape==='circle'){e.w=e.h=360}if(shape==='line'){e.w=700;e.h=10;e.radius=5}for(var k in o)e[k]=o[k];return e}
+  function add(e){S.els.push(e);S.sel=e.id;commit();render();drawProps()}
+
+  /* ---------- render ---------- */
+  var stage=$('#stage'),cv=$('#cv'),elsL=$('#els');
+  function fit(){var k=stage.getBoundingClientRect().width/W;cv.style.transform='scale('+k+')'}
+  window.addEventListener('resize',fit);
+  function scale(){return stage.getBoundingClientRect().width/W}
+  function render(){
+    var b=S.bg,bl=$('#bgl');
+    bl.style.cssText='';bl.style.position='absolute';bl.style.inset='0';
+    if(b.type==='gradient')bl.style.background='linear-gradient(135deg,'+b.a+','+b.b+')';
+    else if(b.type==='color')bl.style.background=b.color;
+    else bl.style.cssText+=';background:url("'+b.src+'") center/cover no-repeat;'+(b.blur?'filter:blur('+b.blur+'px);transform:scale(1.08)':'');
+    $('#ovl').style.background='rgba(0,0,0,'+b.overlay+')';
+    elsL.textContent='';
+    S.els.forEach(function(e){
+      var d=el('div','el'+(e.id===S.sel?' sel':''));d.dataset.id=e.id;
+      d.style.left=e.x+'px';d.style.top=e.y+'px';d.style.width=e.w+'px';
+      d.style.transform='rotate('+e.rot+'deg)';d.style.opacity=e.op;
+      if(e.type==='text'){
+        var t=el('div','tx',e.text);t.dir='rtl';
+        t.style.cssText='font-family:"'+e.font+'",Arial,sans-serif;font-size:'+e.fs+'px;font-weight:'+e.fw+';font-style:'+(e.it?'italic':'normal')+';text-decoration:'+(e.ul?'underline':'none')+';color:'+e.color+';text-align:'+e.align+';line-height:'+e.lh+';letter-spacing:'+e.ls+'px;'+(e.shadow?'text-shadow:0 4px 18px rgba(0,0,0,.55);':'')+(e.bgOn?'background:'+e.bgColor+';padding:'+e.pad+'px;border-radius:'+e.radius+'px;':'');
+        d.appendChild(t);
+      } else if(e.type==='image'){
+        d.style.height=e.h+'px';var im=el('img');im.src=e.src;im.alt='';im.style.cssText='object-fit:'+e.fit+';border-radius:'+e.radius+'px;filter:brightness('+e.bright+'%);'+(e.flip?'transform:scaleX(-1);':'');d.appendChild(im);
+      } else {
+        d.style.height=e.h+'px';d.style.background=e.fill;d.style.borderRadius=(e.shape==='circle'?'50%':e.radius+'px');
+      }
+      if(e.id===S.sel){
+        ['nw','ne','sw','se'].concat(e.type==='text'?['e','w']:[]).forEach(function(p){var h=el('div','h '+p);h.dataset.h=p;d.appendChild(h)});
+        var r=el('div','rot');r.dataset.h='rot';d.appendChild(r);
+      }
+      elsL.appendChild(d);
+    });
+    fit();
+  }
+
+  /* ---------- pointer interactions ---------- */
+  var drag=null;
+  stage.addEventListener('pointerdown',function(ev){
+    var t=ev.target,h=t.closest('[data-h]'),d=t.closest('.el');
+    if(t.isContentEditable)return;
+    if(!d&&!h){S.sel=null;render();drawProps();return}
+    var id=+(d&&d.dataset.id);if(S.sel!==id){S.sel=id;render();drawProps();d=$('.el[data-id="'+id+'"]')}
+    var e=cur();if(!e||prevMode)return;
+    var k=scale(),box=d.getBoundingClientRect();
+    drag={mode:h?h.dataset.h:'move',sx:ev.clientX,sy:ev.clientY,o:JSON.parse(JSON.stringify(e)),h:d.offsetHeight,k:k,cx:box.left+box.width/2,cy:box.top+box.height/2,moved:false};
+    stage.setPointerCapture(ev.pointerId);ev.preventDefault();
+  });
+  stage.addEventListener('pointermove',function(ev){
+    if(!drag)return;var e=cur();if(!e)return;
+    var dx=(ev.clientX-drag.sx)/drag.k,dy=(ev.clientY-drag.sy)/drag.k,o=drag.o,m=drag.mode;drag.moved=true;
+    if(m==='move'){
+      var x=o.x+dx,y=o.y+dy,w=e.w,hh=e.type==='text'?drag.h:e.h,gx=false,gy=false;
+      var xs=[[0,x],[W/2-w/2,x],[W-w,x]],T=10;
+      [[(W-w)/2,'c'],[96,'l'],[W-96-w,'r']].forEach(function(c){if(!gx&&Math.abs(x-c[0])<T){x=c[0];gx=c[1]==='c'?W/2:(c[1]==='l'?96:W-96)}});
+      [[(H-hh)/2,'c'],[54,'t'],[H-54-hh,'b']].forEach(function(c){if(!gy&&Math.abs(y-c[0])<T){y=c[0];gy=c[1]==='c'?H/2:(c[1]==='t'?54:H-54)}});
+      e.x=Math.round(x);e.y=Math.round(y);
+      var gv=$('#gv'),gh=$('#gh');gv.style.display=gx!==false?'block':'none';gh.style.display=gy!==false?'block':'none';
+      if(gx!==false)gv.style.left=(gx-1)+'px';if(gy!==false)gh.style.top=(gy-1)+'px';
+    } else if(m==='rot'){
+      var a=Math.atan2(ev.clientY-drag.cy,ev.clientX-drag.cx)*180/Math.PI+90;a=Math.round(a);if(a>180)a-=360;
+      [0,90,-90,180,-180].forEach(function(s){if(Math.abs(a-s)<4)a=s});e.rot=a;
+    } else if(m==='e'||m==='w'){
+      var nw=m==='e'?o.w+dx:o.w-dx;nw=Math.max(120,nw);e.w=Math.round(nw);if(m==='w')e.x=Math.round(o.x+(o.w-nw));
+    } else {
+      var east=m.indexOf('e')>-1,north=m.indexOf('n')>-1,nw2=Math.max(60,east?o.w+dx:o.w-dx),s=nw2/o.w;
+      e.w=Math.round(nw2);if(!east)e.x=Math.round(o.x+(o.w-nw2));
+      if(e.type==='text'){e.fs=Math.max(10,Math.round(o.fs*s));var nh=drag.h*s;if(north)e.y=Math.round(o.y+(drag.h-nh))}
+      else{var nh2=(e.type==='image'||(e.shape==='circle'))?o.h*s:o.h*s;e.h=Math.round(nh2);if(north)e.y=Math.round(o.y+(o.h-nh2))}
+    }
+    render();
+  });
+  function endDrag(){if(!drag)return;var mv=drag.moved;drag=null;$('#gv').style.display='none';$('#gh').style.display='none';if(mv){commit();drawProps()}}
+  stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);
+  stage.addEventListener('dblclick',function(ev){
+    var d=ev.target.closest('.el');if(!d)return;var e=S.els.filter(function(x){return x.id===+d.dataset.id})[0];if(!e||e.type!=='text')return;
+    var t=d.querySelector('.tx');t.contentEditable='true';t.focus();var r=document.createRange();r.selectNodeContents(t);var s=getSelection();s.removeAllRanges();s.addRange(r);
+    t.addEventListener('blur',function(){e.text=t.innerText.replace(/\n$/,'');t.contentEditable='false';commit();render();drawProps()},{once:true});
+  });
+  document.addEventListener('keydown',function(ev){
+    if(ev.target.closest('input,select,textarea')||ev.target.isContentEditable)return;
+    var e=cur(),step=ev.shiftKey?40:8;
+    if((ev.ctrlKey||ev.metaKey)&&ev.key==='z'){ev.preventDefault();$('#undo').click();return}
+    if((ev.ctrlKey||ev.metaKey)&&ev.key==='y'){ev.preventDefault();$('#redo').click();return}
+    if(!e)return;
+    if(ev.key==='Delete'||ev.key==='Backspace'){S.els=S.els.filter(function(x){return x.id!==e.id});S.sel=null;commit();render();drawProps();ev.preventDefault();return}
+    if((ev.ctrlKey||ev.metaKey)&&ev.key==='d'){ev.preventDefault();dup();return}
+    var mv={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[ev.key];
+    if(mv){e.x+=mv[0];e.y+=mv[1];render();clearTimeout(window.__nt);window.__nt=setTimeout(commit,300);ev.preventDefault()}
+  });
+  function dup(){var e=cur();if(!e)return;var c=JSON.parse(JSON.stringify(e));c.id=uid++;c.x+=40;c.y+=40;S.els.push(c);S.sel=c.id;commit();render();drawProps()}
+  function layer(dir){var e=cur();if(!e)return;var i=S.els.indexOf(e),j=dir==='front'?S.els.length-1:dir==='back'?0:Math.max(0,Math.min(S.els.length-1,i+(dir==='up'?1:-1)));S.els.splice(i,1);S.els.splice(j,0,e);commit();render()}
+  function alignTo(how){
+    var e=cur();if(!e)return;var d=$('.el[data-id="'+e.id+'"]'),h=d?d.offsetHeight:e.h||0;
+    if(how==='l')e.x=96;if(how==='c')e.x=Math.round((W-e.w)/2);if(how==='r')e.x=W-96-e.w;
+    if(how==='t')e.y=54;if(how==='m')e.y=Math.round((H-h)/2);if(how==='b')e.y=H-54-h;
+    commit();render();drawProps();
+  }
+
+  /* ---------- toolbar toggles ---------- */
+  var prevMode=false;
+  function tog(id,fn){var b=$(id);b.addEventListener('click',function(){var on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on?'true':'false');fn(on)})}
+  tog('#tglGrid',function(on){$('#gridL').style.display=on?'block':'none'});
+  tog('#tglSafe',function(on){$('#safeL').style.display=on?'block':'none'});
+  tog('#tglPrev',function(on){prevMode=on;stage.classList.toggle('preview',on);if(on){S.sel=null;render();drawProps();toast('כך המסך נראה בלי כלי העריכה')}});
+
+  /* ---------- left panel ---------- */
+  var ltab='bg';
+  document.querySelectorAll('#ltabs button').forEach(function(b){b.addEventListener('click',function(){ltab=b.dataset.t;document.querySelectorAll('#ltabs button').forEach(function(x){x.setAttribute('aria-selected',x===b?'true':'false')});drawLeft()})});
+  function pickFile(cb){var i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=function(){var f=i.files[0];if(!f)return;var r=new FileReader();r.onload=function(){cb(r.result)};r.readAsDataURL(f)};i.click()}
+  function setBg(o){for(var k in o)S.bg[k]=o[k];commit();render();drawProps()}
+  function drawLeft(){
+    var p=$('#lpanel');p.textContent='';
+    if(ltab==='bg'){
+      p.appendChild(el('h3',null,'צבע מעבר'));var g=el('div','grid3');
+      GRADS.forEach(function(c){var b=el('button','thumb');b.type='button';b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.addEventListener('click',function(){setBg({type:'gradient',a:c[0],b:c[1]})});g.appendChild(b)});p.appendChild(g);
+      p.appendChild(el('h3',null,'צבע אחיד'));var r=el('div','row');
+      SW.forEach(function(c){var b=el('button','sw');b.type='button';b.style.background=c;b.setAttribute('aria-label',c);b.addEventListener('click',function(){setBg({type:'color',color:c})});r.appendChild(b)});
+      var ci=el('input');ci.type='color';ci.value='#14305f';ci.addEventListener('change',function(){setBg({type:'color',color:ci.value})});r.appendChild(ci);p.appendChild(r);
+      p.appendChild(el('h3',null,'תמונת רקע'));
+      var up=el('button','btn','העלאה מהמכשיר');up.type='button';up.style.width='100%';up.addEventListener('click',function(){pickFile(function(src){setBg({type:'image',src:src})})});p.appendChild(up);
+      var gg=el('div','grid2');gg.style.marginTop='8px';
+      GAL.forEach(function(x){var b=el('button','thumb');b.type='button';var im=el('img');im.src=x[1];im.alt=x[0];b.appendChild(im);b.appendChild(el('span',null,x[0]));b.addEventListener('click',function(){setBg({type:'image',src:x[1]})});gg.appendChild(b)});p.appendChild(gg);
+      p.appendChild(el('p','note','בגרסה האמיתית: אוסף תמונות מוכן לפי קטגוריה, והתמונות שלכם נשמרות בספרייה.'));
+    }
+    if(ltab==='text'){
+      p.appendChild(el('h3',null,'הוספת טקסט'));
+      [['כותרת גדולה',function(){return newText('כותרת חדשה',{fs:150,fw:800,y:300})}],['כותרת משנה',function(){return newText('כותרת משנה',{fs:84,fw:700,y:520})}],['טקסט רגיל',function(){return newText('כאן כותבים את הטקסט',{fs:56,fw:400,y:700,w:1100,x:410})}],['תווית',function(){return newText('חדש',{fs:48,fw:800,w:260,x:120,y:90,bgOn:true,bgColor:'#f2c14e',color:'#14202e',radius:99,pad:14})}],['מחיר גדול',function(){return newText('₪19',{fs:260,fw:900,font:'Rubik',w:700,x:610,y:300})}]].forEach(function(x){
+        var b=el('button','btn',x[0]);b.type='button';b.style.cssText='width:100%;margin-bottom:6px;text-align:start';b.addEventListener('click',function(){add(x[1]())});p.appendChild(b)});
+      p.appendChild(el('p','note','אחרי ההוספה אפשר לשנות גופן, גודל, צבע, יישור, צל ורקע לטקסט בפאנל מימין.'));
+    }
+    if(ltab==='img'){
+      p.appendChild(el('h3',null,'הוספת תמונה לעיצוב'));
+      var up2=el('button','btn p','העלאה מהמכשיר');up2.type='button';up2.style.width='100%';up2.addEventListener('click',function(){pickFile(function(src){add(newImg(src))})});p.appendChild(up2);
+      var gg2=el('div','grid2');gg2.style.marginTop='8px';
+      GAL.forEach(function(x){var b=el('button','thumb');b.type='button';var im=el('img');im.src=x[1];im.alt=x[0];b.appendChild(im);b.appendChild(el('span',null,x[0]));b.addEventListener('click',function(){add(newImg(x[1],{x:360,y:200,w:1200,h:675}))});gg2.appendChild(b)});p.appendChild(gg2);
+    }
+    if(ltab==='shape'){
+      p.appendChild(el('h3',null,'צורות'));var sg=el('div','grid2');
+      [['rect','מלבן'],['circle','עיגול'],['line','קו']].forEach(function(x){var b=el('button','btn',x[1]);b.type='button';b.addEventListener('click',function(){add(newShape(x[0]))});sg.appendChild(b)});p.appendChild(sg);
+      p.appendChild(el('p','note','צורות עוזרות להבליט טקסט: מלבן מאחורי הכותרת, או קו מפריד.'));
+    }
+    if(ltab==='tpl'){
+      p.appendChild(el('h3',null,'נקודת פתיחה'));
+      [['מבצע',tplSale],['הודעת ועד',tplVaad],['ברכת חג',tplGreet],['דף ריק',tplBlank]].forEach(function(x){var b=el('button','btn',x[0]);b.type='button';b.style.cssText='width:100%;margin-bottom:6px;text-align:start';b.addEventListener('click',function(){x[1]();commit();render();drawProps();toast('נטענה תבנית "'+x[0]+'". הכול ניתן לשינוי')});p.appendChild(b)});
+      p.appendChild(el('p','note','תבנית היא רק נקודת פתיחה. כל רכיב בה ניתן להזזה, שינוי ומחיקה.'));
+    }
+  }
+  function tplBlank(){S.bg={type:'color',a:'#14305f',b:'#2b5bb3',color:'#ffffff',src:'',overlay:0,blur:0};S.els=[];S.sel=null}
+  function tplSale(){S.bg={type:'image',a:'',b:'',color:'',src:GAL[0][1],overlay:.28,blur:0};S.sel=null;
+    S.els=[newText('בורקס חם',{fs:230,fw:900,font:'Rubik',y:250,shadow:true}),newText('כל בוקר עד 11:00',{fs:84,fw:500,y:560,shadow:true}),newText('2 ב-20 ₪',{fs:56,fw:800,w:360,x:1380,y:90,bgOn:true,bgColor:'#f2c14e',color:'#14202e',radius:99,pad:16})]}
+  function tplVaad(){S.bg={type:'gradient',a:'#14305f',b:'#2b5bb3',color:'',src:'',overlay:0,blur:0};S.sel=null;
+    S.els=[newText('הודעת ועד הבית',{fs:56,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),newText('פינוי גזם ביום שלישי',{fs:160,fw:800,align:'right',w:1500,x:210,y:240}),newText('נא להוציא את הגזם עד 08:00 ליד הכניסה הצפונית.',{fs:68,fw:400,align:'right',w:1500,x:210,y:560}),newText('מוצגת עד 12.11',{fs:44,fw:700,w:420,x:210,y:900,bgOn:true,bgColor:'#ffffff33',radius:99,pad:12})]}
+  function tplGreet(){S.bg={type:'image',a:'',b:'',color:'',src:GAL[2][1],overlay:.15,blur:0};S.sel=null;
+    S.els=[newText('חג שמח',{fs:300,fw:900,font:'Secular One',y:260,shadow:true}),newText('מאחלים לכולם חג שמח ומבורך',{fs:86,fw:500,y:660,shadow:true})]}
+
+  /* ---------- right panel ---------- */
+  function ctl(label,node,cls){var l=el('label','f '+(cls||''));l.appendChild(document.createTextNode(label));l.appendChild(node);return l}
+  function num(v,min,max,step,on){var i=el('input');i.type='number';i.value=v;i.min=min;i.max=max;i.step=step||1;i.addEventListener('input',function(){if(i.value==='')return;on(+i.value)});i.addEventListener('change',function(){commit()});return i}
+  function rng(v,min,max,step,on){var i=el('input');i.type='range';i.min=min;i.max=max;i.step=step||1;i.value=v;i.addEventListener('input',function(){on(+i.value)});i.addEventListener('change',function(){commit();});return i}
+  function colorRow(val,on){var r=el('div','row');SW.forEach(function(c){var b=el('button','sw'+(c.toLowerCase()===String(val).toLowerCase()?' on':''));b.type='button';b.style.background=c;b.setAttribute('aria-label',c);b.addEventListener('click',function(){on(c);commit();drawProps()});r.appendChild(b)});var ci=el('input');ci.type='color';ci.value=/^#[0-9a-f]{6}$/i.test(val)?val:'#ffffff';ci.addEventListener('input',function(){on(ci.value)});ci.addEventListener('change',function(){commit();drawProps()});r.appendChild(ci);return r}
+  function sw(label,val,on){var b=el('button','btn sm',label);b.type='button';b.setAttribute('aria-pressed',val?'true':'false');b.addEventListener('click',function(){on(!val);commit();render();drawProps()});return b}
+  function apply(fn){var e=cur();if(!e)return;fn(e);render()}
+  function drawProps(){
+    var p=$('#props');p.textContent='';var e=cur();
+    if(!e){
+      p.appendChild(el('h3',null,'רקע'));
+      p.appendChild(el('p','note','בחרו רכיב בעיצוב כדי לערוך אותו, או שנו כאן את הרקע.'));
+      p.appendChild(ctl('כהות שכבה על הרקע (לקריאות הטקסט)',rng(S.bg.overlay,0,.8,.02,function(v){S.bg.overlay=v;render()})));
+      if(S.bg.type==='image')p.appendChild(ctl('טשטוש הרקע',rng(S.bg.blur,0,30,1,function(v){S.bg.blur=v;render()})));
+      p.appendChild(el('h3',null,'שכבות'));
+      var ul=el('div');ul.style.display='grid';ul.style.gap='4px';
+      S.els.slice().reverse().forEach(function(x){var b=el('button','btn sm',(x.type==='text'?'טקסט: '+(x.text||'').slice(0,18):x.type==='image'?'תמונה':'צורה'));b.type='button';b.style.textAlign='start';b.addEventListener('click',function(){S.sel=x.id;render();drawProps()});ul.appendChild(b)});
+      if(!S.els.length)ul.appendChild(el('p','note','אין רכיבים עדיין.'));
+      p.appendChild(ul);return;
+    }
+    p.appendChild(el('h3',null,e.type==='text'?'טקסט':e.type==='image'?'תמונה':'צורה'));
+    if(e.type==='text'){
+      var fs=el('select');Object.keys(FONTS).forEach(function(k){var o=el('option',null,FONTS[k]);o.value=k;o.style.fontFamily='"'+k+'"';if(k===e.font)o.selected=true;fs.appendChild(o)});fs.addEventListener('change',function(){apply(function(x){x.font=fs.value});commit()});
+      p.appendChild(ctl('גופן',fs));
+      var r1=el('div','grid2');r1.style.marginTop='8px';r1.appendChild(ctl('גודל',num(e.fs,10,600,2,function(v){apply(function(x){x.fs=v})})));
+      var ro=el('div','row');ro.style.alignSelf='end';ro.appendChild(sw('מודגש',e.fw>=700,function(v){e.fw=v?800:400}));ro.appendChild(sw('נטוי',e.it,function(v){e.it=v}));ro.appendChild(sw('קו תחתון',e.ul,function(v){e.ul=v}));
+      r1.appendChild(ro);p.appendChild(r1);
+      p.appendChild(el('h3',null,'יישור הטקסט'));var al=el('div','row');[['right','ימין'],['center','מרכז'],['left','שמאל']].forEach(function(a){var b=el('button','btn sm',a[1]);b.type='button';b.setAttribute('aria-pressed',e.align===a[0]?'true':'false');b.addEventListener('click',function(){e.align=a[0];commit();render();drawProps()});al.appendChild(b)});p.appendChild(al);
+      p.appendChild(el('h3',null,'צבע'));p.appendChild(colorRow(e.color,function(c){e.color=c;render()}));
+      p.appendChild(el('h3',null,'מרווחים'));
+      p.appendChild(ctl('גובה שורה',rng(e.lh,.8,2,.05,function(v){apply(function(x){x.lh=v})})));
+      p.appendChild(ctl('מרווח בין אותיות',rng(e.ls,-4,30,1,function(v){apply(function(x){x.ls=v})})));
+      p.appendChild(el('h3',null,'אפקטים'));var ef=el('div','row');ef.appendChild(sw('צל',e.shadow,function(v){e.shadow=v}));ef.appendChild(sw('רקע לטקסט',e.bgOn,function(v){e.bgOn=v}));p.appendChild(ef);
+      if(e.bgOn){p.appendChild(ctl('צבע הרקע',colorRow(e.bgColor,function(c){e.bgColor=c;render()})));p.appendChild(ctl('ריפוד',rng(e.pad,0,80,2,function(v){apply(function(x){x.pad=v})})));p.appendChild(ctl('עיגול פינות',rng(e.radius,0,80,2,function(v){apply(function(x){x.radius=v})})))}
+    } else if(e.type==='image'){
+      p.appendChild(ctl('שקיפות',rng(e.op,.1,1,.02,function(v){apply(function(x){x.op=v})})));
+      p.appendChild(ctl('בהירות',rng(e.bright,30,170,2,function(v){apply(function(x){x.bright=v})})));
+      p.appendChild(ctl('עיגול פינות',rng(e.radius,0,400,4,function(v){apply(function(x){x.radius=v})})));
+      var ir=el('div','row');ir.style.marginTop='8px';ir.appendChild(sw('הפוך אופקית',e.flip,function(v){e.flip=v}));ir.appendChild(sw('התאמה: מילוי',e.fit==='cover',function(v){e.fit=v?'cover':'contain'}));p.appendChild(ir);
+      var rp=el('button','btn sm','החלפת תמונה');rp.type='button';rp.style.marginTop='8px';rp.addEventListener('click',function(){pickFile(function(src){e.src=src;commit();render()})});p.appendChild(rp);
+    } else {
+      p.appendChild(el('h3',null,'צבע מילוי'));p.appendChild(colorRow(e.fill,function(c){e.fill=c;render()}));
+      p.appendChild(ctl('שקיפות',rng(e.op,.1,1,.02,function(v){apply(function(x){x.op=v})})));
+      if(e.shape==='rect')p.appendChild(ctl('עיגול פינות',rng(e.radius,0,200,2,function(v){apply(function(x){x.radius=v})})));
+    }
+    p.appendChild(el('h3',null,'סיבוב'));p.appendChild(ctl('מעלות',rng(e.rot,-180,180,1,function(v){apply(function(x){x.rot=v})})));
+    p.appendChild(el('h3',null,'יישור על המסך'));
+    var ag=el('div','row');[['r','ימין'],['c','מרכז'],['l','שמאל'],['t','למעלה'],['m','אמצע'],['b','למטה']].forEach(function(a){var b=el('button','btn sm',a[1]);b.type='button';b.addEventListener('click',function(){alignTo(a[0])});ag.appendChild(b)});p.appendChild(ag);
+    p.appendChild(el('h3',null,'סדר שכבות'));
+    var lg=el('div','row');[['front','לקדמה'],['up','קדימה'],['down','אחורה'],['back','לרקע']].forEach(function(a){var b=el('button','btn sm',a[1]);b.type='button';b.addEventListener('click',function(){layer(a[0])});lg.appendChild(b)});p.appendChild(lg);
+    var act=el('div','row');act.style.marginTop='12px';
+    var d1=el('button','btn sm','שכפל');d1.type='button';d1.addEventListener('click',dup);
+    var d2=el('button','btn sm','מחק');d2.type='button';d2.style.color='var(--danger)';d2.addEventListener('click',function(){S.els=S.els.filter(function(x){return x.id!==e.id});S.sel=null;commit();render();drawProps()});
+    act.appendChild(d1);act.appendChild(d2);p.appendChild(act);
+  }
+
+  /* ---------- add to screen sheet ---------- */
+  var when='all';
+  var WH={all:'כל היום',m:'בוקר',n:'צהריים',e:'ערב',f:'שישי בלבד',w:'ימי חול'};
+  var wc=$('#whenChips');Object.keys(WH).forEach(function(k){var b=el('button','chip',WH[k]);b.type='button';b.setAttribute('aria-pressed',k==='all'?'true':'false');b.addEventListener('click',function(){when=k;wc.querySelectorAll('button').forEach(function(x,i){x.setAttribute('aria-pressed',Object.keys(WH)[i]===k?'true':'false')})});wc.appendChild(b)});
+  $('#addToScreen').addEventListener('click',function(){$('#sheet').classList.add('show')});
+  $('#sheetNo').addEventListener('click',function(){$('#sheet').classList.remove('show')});
+  $('#sheetOk').addEventListener('click',function(){
+    var ok=$('#sheetOk');ok.disabled=true;ok.textContent='מוסיף...';S.sel=null;render();
+    exportBlob().then(function(blob){return addSlide(blob,{period:when,dur:+$('#durIn').value||8})}).then(function(){
+      ok.disabled=false;ok.textContent='הוסף';$('#sheet').classList.remove('show');toast('התמונה נוספה למסך. תופיע תוך כדקה');
+    }).catch(function(err){ok.disabled=false;ok.textContent='הוסף';toast('שגיאה: '+(err&&err.message||err))});
+  });
+  var CID=new URLSearchParams(location.search).get('c'),sb=window.supabase.createClient(window.CONFIG.url,window.CONFIG.key);
+  sb.auth.getSession().then(function(r){if(!r.data.session||!CID){location.href='index.html'}});
+  function addSlide(blob,meta){
+    var path=CID+'/'+(window.crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now()))+'.jpg';
+    return sb.storage.from('slides').upload(path,blob,{contentType:'image/jpeg'}).then(function(u){if(u.error)throw u.error;
+      return sb.from('slides').select('position').eq('client_id',CID).order('position',{ascending:false}).limit(1)}).then(function(p){
+      var next=p.data&&p.data[0]?p.data[0].position+1:0;
+      return sb.from('slides').insert({client_id:CID,image_path:path,title:'עיצוב',period:meta.period,dur:Math.max(3,Math.min(60,meta.dur)),position:next})}).then(function(x){if(x.error)throw x.error});
+  }
+  window.__exportBlob=function(){return exportBlob()};
+  function loadImg(src){return new Promise(function(res,rej){var i=new Image();i.onload=function(){res(i)};i.onerror=rej;i.src=src})}
+  function rrect(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+  function drawCover(c,im,x,y,w,h,mode){var iw=im.naturalWidth||im.width||w,ih=im.naturalHeight||im.height||h,k=mode==='contain'?Math.min(w/iw,h/ih):Math.max(w/iw,h/ih),dw=iw*k,dh=ih*k;c.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh)}
+  function wrap(c,text,maxW){var out=[];String(text||'').split('\n').forEach(function(par){var ws=par.split(/\s+/).filter(Boolean),ln='';if(!ws.length){out.push('');return}ws.forEach(function(w){var t=ln?ln+' '+w:w;if(c.measureText(t).width>maxW&&ln){out.push(ln);ln=w}else ln=t});out.push(ln)});return out}
+  function exportBlob(){
+    var fonts=[];S.els.forEach(function(e){if(e.type==='text')fonts.push(document.fonts.load((e.fw||400)+' 40px "'+e.font+'"'))});
+    var need=[];if(S.bg.type==='image')need.push(loadImg(S.bg.src));S.els.forEach(function(e){if(e.type==='image')need.push(loadImg(e.src))});
+    return Promise.all(fonts.concat([document.fonts.ready])).catch(function(){}).then(function(){return Promise.all(need)}).then(function(imgs){
+      var cn=document.createElement('canvas');cn.width=W;cn.height=H;var c=cn.getContext('2d'),ii=0,b=S.bg;
+      if(b.type==='gradient'){var g=c.createLinearGradient(0,0,W,H);g.addColorStop(0,b.a);g.addColorStop(1,b.b);c.fillStyle=g;c.fillRect(0,0,W,H)}
+      else if(b.type==='color'){c.fillStyle=b.color;c.fillRect(0,0,W,H)}
+      else{var bi=imgs[ii++];c.save();if(b.blur){c.filter='blur('+b.blur+'px)';c.translate(W/2,H/2);c.scale(1.08,1.08);c.translate(-W/2,-H/2)}drawCover(c,bi,0,0,W,H,'cover');c.restore()}
+      if(b.overlay){c.fillStyle='rgba(0,0,0,'+b.overlay+')';c.fillRect(0,0,W,H)}
+      S.els.forEach(function(e){
+        var im=e.type==='image'?imgs[ii++]:null;
+        var d=document.querySelector('.el[data-id="'+e.id+'"]'),h=e.type==='text'?(d?d.offsetHeight:e.fs*1.2):e.h;
+        c.save();c.globalAlpha=e.op;c.translate(e.x+e.w/2,e.y+h/2);c.rotate(e.rot*Math.PI/180);c.translate(-e.w/2,-h/2);
+        if(e.type==='shape'){c.fillStyle=e.fill;if(e.shape==='circle'){c.beginPath();c.ellipse(e.w/2,h/2,e.w/2,h/2,0,0,7);c.fill()}else{rrect(c,0,0,e.w,h,e.radius);c.fill()}}
+        else if(e.type==='image'){rrect(c,0,0,e.w,h,e.radius);c.clip();c.filter='brightness('+e.bright+'%)';if(e.flip){c.translate(e.w,0);c.scale(-1,1)}drawCover(c,im,0,0,e.w,h,e.fit)}
+        else{
+          var pad=e.bgOn?e.pad:0,inner=e.w-2*pad;c.font=(e.it?'italic ':'')+e.fw+' '+e.fs+'px "'+e.font+'",Arial,sans-serif';c.direction='rtl';
+          if('letterSpacing' in c)c.letterSpacing=e.ls+'px';
+          var lines=wrap(c,e.text,inner),lh=e.fs*e.lh,tot=lines.length*lh+2*pad;
+          if(e.bgOn){c.fillStyle=e.bgColor;rrect(c,0,0,e.w,tot,e.radius);c.fill()}
+          if(e.shadow){c.shadowColor='rgba(0,0,0,.55)';c.shadowBlur=18;c.shadowOffsetY=4}
+          c.fillStyle=e.color;c.textBaseline='middle';c.textAlign=e.align;
+          var x=e.align==='right'?e.w-pad:e.align==='left'?pad:e.w/2;
+          lines.forEach(function(l,i){var y=pad+lh*i+lh/2;c.fillText(l,x,y);
+            if(e.ul){var tw=c.measureText(l).width,x0=e.align==='right'?x-tw:e.align==='left'?x:x-tw/2;c.shadowColor='transparent';c.fillRect(x0,y+e.fs*.38,tw,Math.max(2,e.fs/18))}});
+        }
+        c.restore();
+      });
+      return new Promise(function(res,rej){cn.toBlob(function(bl){bl?res(bl):rej(new Error('יצירת התמונה נכשלה'))},'image/jpeg',.92)});
+    });
+  }
+
+  tplSale();commit();render();drawLeft();drawProps();
+  setTimeout(fit,50);
+})();
+</script>
+
+</body></html>
