@@ -206,15 +206,32 @@
     box.appendChild(f); return box;
   }
   function linkForm(clients){
-    var box = el('div', 'box'); box.appendChild(el('h2', null, 'קישור משתמש ללקוח'));
-    box.appendChild(el('p', 'note', 'קודם יוצרים משתמש ב-Supabase: Authentication, Users, Add user (עם סימון Auto Confirm). אחר כך מקשרים כאן את האימייל ללקוח.'));
+    var box = el('div', 'box'); box.appendChild(el('h2', null, 'יצירת משתמש ללקוח'));
+    box.appendChild(el('p', 'note', 'הלקוח ייכנס עם האימייל והסיסמה האלה בקישור הניהול, ויראה רק את המסך שלו. אם האימייל כבר קיים, הסיסמה תתאפס והוא יקושר ללקוח.'));
     var f = el('form'), em = input('email', 'le'); em.required = true;
     var sel = el('select'); clients.forEach(function(c){ var o = el('option', null, c.name); o.value = c.id; sel.appendChild(o); });
-    f.appendChild(field('אימייל המשתמש', em)); f.appendChild(field('לקוח', sel));
-    var go = el('button', 'p', 'קשר'); go.type = 'submit'; f.appendChild(go);
+    var pw = input('text', 'pw'); pw.placeholder = 'ריק = ליצור סיסמה אוטומטית'; pw.autocomplete = 'off';
+    f.appendChild(field('אימייל הלקוח', em)); f.appendChild(field('לקוח', sel)); f.appendChild(field('סיסמה התחלתית (לא חובה)', pw));
+    var go = el('button', 'p', 'צור משתמש'); go.type = 'submit'; f.appendChild(go);
+    var out = el('div', 'note full'); out.style.whiteSpace = 'pre-wrap'; f.appendChild(out);
     f.addEventListener('submit', function(e){
-      e.preventDefault();
-      sb.rpc('admin_link_user', {p_email:em.value.trim(), p_client:sel.value}).then(function(r){ if(ok(r)){ toast('המשתמש קושר ללקוח'); em.value = ''; } });
+      e.preventDefault(); go.disabled = true; out.textContent = '';
+      sb.functions.invoke('manage-user', {body:{email:em.value.trim(), client_id:sel.value, password:pw.value.trim() || undefined}}).then(function(r){
+        go.disabled = false;
+        var d = r.data;
+        if(r.error || !d || !d.ok){
+          var msg = (d && d.error) || 'שגיאה ביצירת המשתמש';
+          if(r.error && r.error.context && r.error.context.json){ r.error.context.json().then(function(j){ out.textContent = (j && j.error) || msg; toast('שגיאה'); }).catch(function(){ out.textContent = msg; }); }
+          else out.textContent = msg;
+          return;
+        }
+        var text = 'כניסה ללקוח\nקישור: ' + location.origin + location.pathname + '\nאימייל: ' + d.email + '\nסיסמה: ' + d.password;
+        out.textContent = (d.created ? 'המשתמש נוצר.\n' : 'המשתמש כבר היה קיים. הסיסמה אופסה.\n') + text;
+        var cp = el('button', null, 'העתק את פרטי הכניסה'); cp.type = 'button';
+        cp.addEventListener('click', function(){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(function(){ toast('הועתק'); }); });
+        out.appendChild(document.createElement('br')); out.appendChild(cp);
+        em.value = ''; pw.value = '';
+      });
     });
     box.appendChild(f); return box;
   }
