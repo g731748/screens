@@ -149,25 +149,25 @@
   }
   function alertBox(){
     var box = el('div', 'box'); box.appendChild(el('h2', null, 'התראות על מסך שנופל'));
-    box.appendChild(el('p', 'note', 'אם מסך לא מדווח 10 דקות, תישלח אליך הודעת וואטסאפ אחת, ועוד אחת כשהוא חוזר. לא נשלחות הודעות בשבת (משישי 14:00 עד מוצאי שבת 20:00) ובלילה (22:00 עד 05:30). חגים עדיין לא מוגדרים.'));
-    var f = el('form'), en = input('checkbox', null), ph = input('tel', null), key = input('text', null);
-    ph.placeholder = '9725XXXXXXXX'; ph.dir = 'ltr'; key.dir = 'ltr';
+    box.appendChild(el('p', 'note', 'אם מסך לא מדווח 10 דקות, יישלח אליך אימייל אחד, ועוד אחד כשהוא חוזר. לא נשלחות הודעות בשבת (משישי 14:00 עד מוצאי שבת 20:00) ובלילה (22:00 עד 05:30). חגים עדיין לא מוגדרים.'));
+    var f = el('form'), en = input('checkbox', null), ph = input('email', null), key = input('text', null);
+    ph.placeholder = 'name@gmail.com'; ph.dir = 'ltr'; key.dir = 'ltr'; key.placeholder = 're_...';
     var l = el('label', 'chk'); l.appendChild(en); l.appendChild(document.createTextNode('התראות פעילות')); f.appendChild(l);
-    f.appendChild(field('מספר וואטסאפ (בפורמט בינלאומי)', ph)); f.appendChild(field('מפתח השירות', key));
+    f.appendChild(field('אימייל לקבלת ההתראות', ph)); f.appendChild(field('מפתח Resend', key));
     var hint = el('p', 'note full', ''); f.appendChild(hint);
     var go = el('button', 'p', 'שמור'); go.type = 'submit'; f.appendChild(go);
     var test = el('button', null, 'שלח הודעת בדיקה'); test.type = 'button'; f.appendChild(test);
     sb.rpc('admin_get_alert').then(function(r){
       if(r.error || !r.data) return;
-      en.checked = !!r.data.enabled; ph.value = r.data.phone || '';
+      en.checked = !!r.data.enabled; ph.value = r.data.email || '';
       hint.textContent = r.data.has_key ? 'מפתח שמור. השאירו ריק כדי לא לשנות.' : 'עדיין לא נשמר מפתח.';
     });
     f.addEventListener('submit', function(e){
       e.preventDefault();
-      sb.rpc('admin_save_alert', {p_enabled:en.checked, p_phone:ph.value, p_key:key.value || null}).then(function(r){ if(ok(r)){ toast('נשמר'); key.value = ''; hint.textContent = 'מפתח שמור. השאירו ריק כדי לא לשנות.'; } });
+      sb.rpc('admin_save_alert', {p_enabled:en.checked, p_email:ph.value.trim(), p_key:key.value.trim() || null}).then(function(r){ if(ok(r)){ toast('נשמר'); key.value = ''; hint.textContent = 'מפתח שמור. השאירו ריק כדי לא לשנות.'; } });
     });
     test.addEventListener('click', function(){
-      sb.rpc('admin_test_alert').then(function(r){ if(ok(r)) toast('נשלחה הודעת בדיקה. אם לא הגיעה, בדקו מספר ומפתח.'); });
+      sb.rpc('admin_test_alert').then(function(r){ if(ok(r)) toast('נשלחה הודעת בדיקה. אם לא הגיעה תוך דקה, בדקו אימייל ומפתח, ואת תיבת הספאם.'); });
     });
     box.appendChild(f); return box;
   }
