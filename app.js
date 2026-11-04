@@ -70,12 +70,36 @@
     });
     root.appendChild(f);
   }
+  /* first login with a temporary password: the customer must choose their own */
+  function renderChangePw(){
+    var root = document.getElementById('app') || document.body; root.textContent = '';
+    var f = el('form', 'login');
+    f.appendChild(el('div', 'logo', 'בחירת סיסמה'));
+    f.appendChild(el('p', 'note', 'נכנסתם עם סיסמה זמנית. בחרו סיסמה משלכם כדי להמשיך.'));
+    var p1 = input('password', 'np1'), p2 = input('password', 'np2'); p1.autocomplete = p2.autocomplete = 'new-password'; p1.required = p2.required = true; p1.minLength = 8;
+    f.appendChild(field('סיסמה חדשה (לפחות 8 תווים)', p1)); f.appendChild(field('הקלידו שוב', p2));
+    var err = el('p', 'err', ''); f.appendChild(err);
+    var b = el('button', 'p', 'שמור והמשך'); b.type = 'submit'; f.appendChild(b);
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); err.textContent = '';
+      if(p1.value.length < 8){ err.textContent = 'הסיסמה קצרה מדי'; return; }
+      if(p1.value !== p2.value){ err.textContent = 'הסיסמאות לא זהות'; return; }
+      b.disabled = true;
+      sb.auth.updateUser({password:p1.value, data:{must_change:false}}).then(function(r){
+        b.disabled = false;
+        if(r.error){ err.textContent = 'לא הצלחנו לשמור: ' + r.error.message; return; }
+        toast('הסיסמה עודכנה'); start();
+      });
+    });
+    root.appendChild(f);
+  }
   function renderMsg(t){ var m = shell('ניהול מסך'); m.appendChild(el('p', 'sub', t)); }
 
   function start(){
     sb.auth.getSession().then(function(r){
       var s = r.data && r.data.session;
       if(!s) return renderLogin();
+      if(s.user && s.user.user_metadata && s.user.user_metadata.must_change) return renderChangePw();
       sb.from('profiles').select('role,client_id').eq('id', s.user.id).maybeSingle().then(function(p){
         if(p.error || !p.data) return renderMsg('אין פרופיל למשתמש הזה. פנו למיכאל מערכות.');
         if(p.data.role === 'admin') return renderAdmin();
