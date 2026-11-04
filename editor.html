@@ -72,6 +72,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
 #toast{position:fixed;inset-inline:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));margin:auto;width:max-content;max-width:90%;background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30}
 #toast.show{opacity:1}
 @media(prefers-reduced-motion:reduce){#toast{transition:none}}
+a.btn{text-decoration:none;color:var(--ink);display:inline-block}a.btn.p{color:var(--onbrand)}
 </style>
 
 </head><body>
@@ -79,6 +80,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
   <div class="top">
     <h1>עורך תמונה למסך</h1>
     <a class="btn" id="back" href="index.html">חזרה לניהול</a>
+    <input type="text" id="dname" value="עיצוב ללא שם" aria-label="שם העיצוב" style="width:160px;padding:6px 9px"><button class="btn" id="saveD" type="button">שמור</button>
     <button class="btn" id="undo" type="button">בטל</button>
     <button class="btn" id="redo" type="button">חזור</button>
     <button class="btn" id="tglGrid" type="button" aria-pressed="false">רשת</button>
@@ -94,6 +96,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
         <button role="tab" data-t="img" aria-selected="false">תמונות</button>
         <button role="tab" data-t="shape" aria-selected="false">צורות</button>
         <button role="tab" data-t="tpl" aria-selected="false">תבניות</button>
+        <button role="tab" data-t="mine" aria-selected="false">שמורים</button>
       </div>
       <div id="lpanel"></div>
     </div>
@@ -122,7 +125,8 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
 <div id="toast" role="status"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=12"></script>
+<script src="config.js?v=13"></script>
+<script src="cats.js?v=13"></script>
 <script>
 (function(){
   function $(s,r){return (r||document).querySelector(s)}
@@ -149,7 +153,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
   var S={bg:{type:'gradient',a:'#14305f',b:'#2b5bb3',color:'#14305f',src:'',overlay:0,blur:0},els:[],sel:null};
   var hist=[],hi=-1;
   function snap(){return JSON.stringify({bg:S.bg,els:S.els})}
-  function commit(){hist=hist.slice(0,hi+1);hist.push(snap());if(hist.length>60)hist.shift();hi=hist.length-1;syncHist()}
+  function commit(){hist=hist.slice(0,hi+1);hist.push(snap());if(hist.length>60)hist.shift();hi=hist.length-1;syncHist();dirty=hist.length>1}
   function restore(j){var o=JSON.parse(j);S.bg=o.bg;S.els=o.els;if(!S.els.some(function(e){return e.id===S.sel}))S.sel=null;render();drawProps()}
   function syncHist(){$('#undo').disabled=hi<=0;$('#redo').disabled=hi>=hist.length-1}
   $('#undo').addEventListener('click',function(){if(hi>0){hi--;restore(hist[hi]);syncHist()}});
@@ -270,7 +274,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
   /* ---------- left panel ---------- */
   var ltab='bg';
   document.querySelectorAll('#ltabs button').forEach(function(b){b.addEventListener('click',function(){ltab=b.dataset.t;document.querySelectorAll('#ltabs button').forEach(function(x){x.setAttribute('aria-selected',x===b?'true':'false')});drawLeft()})});
-  function pickFile(cb){var i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=function(){var f=i.files[0];if(!f)return;var r=new FileReader();r.onload=function(){cb(r.result)};r.readAsDataURL(f)};i.click()}
+  function pickFile(cb){var i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=function(){var f=i.files[0];if(!f)return;var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);cb(c.toDataURL(f.type==='image/png'?'image/png':'image/jpeg',.86))};im.onerror=function(){toast('הקובץ לא נקרא')};im.src=r.result};r.readAsDataURL(f)};i.click()}
   function setBg(o){for(var k in o)S.bg[k]=o[k];commit();render();drawProps()}
   function drawLeft(){
     var p=$('#lpanel');p.textContent='';
@@ -304,19 +308,45 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
       p.appendChild(el('p','note','צורות עוזרות להבליט טקסט: מלבן מאחורי הכותרת, או קו מפריד.'));
     }
     if(ltab==='tpl'){
-      p.appendChild(el('h3',null,'נקודת פתיחה'));
-      [['מבצע',tplSale],['הודעת ועד',tplVaad],['ברכת חג',tplGreet],['דף ריק',tplBlank]].forEach(function(x){var b=el('button','btn',x[0]);b.type='button';b.style.cssText='width:100%;margin-bottom:6px;text-align:start';b.addEventListener('click',function(){x[1]();commit();render();drawProps();toast('נטענה תבנית "'+x[0]+'". הכול ניתן לשינוי')});p.appendChild(b)});
+      var keys=(window.CATS[CAT]?window.CATS[CAT].tpl:[]).concat(['blank']);
+      p.appendChild(el('h3',null,'תבניות ל'+(window.CATS[CAT]?window.CATS[CAT].n:'עסק')));
+      keys.forEach(function(k){var b=el('button','btn',k==='blank'?'דף ריק':window.TPL_NAMES[k]);b.type='button';b.style.cssText='width:100%;margin-bottom:6px;text-align:start';b.addEventListener('click',function(){(TPL[k]||tplBlank)();commit();render();drawProps();toast('נטענה תבנית "'+b.textContent+'". הכול ניתן לשינוי')});p.appendChild(b)});
+      p.appendChild(el('h3',null,'כל התבניות'));var all=el('div','chips');
+      Object.keys(window.TPL_NAMES).forEach(function(k){var b=el('button','chip',window.TPL_NAMES[k]);b.type='button';b.addEventListener('click',function(){TPL[k]();commit();render();drawProps()});all.appendChild(b)});p.appendChild(all);
       p.appendChild(el('p','note','תבנית היא רק נקודת פתיחה. כל רכיב בה ניתן להזזה, שינוי ומחיקה.'));
     }
+    if(ltab==='mine'){
+      p.appendChild(el('h3',null,'העיצובים השמורים שלי'));
+      var box=el('div','grid2');p.appendChild(box);
+      sb.from('designs').select('id,name,thumb,updated_at').eq('client_id',CID).order('updated_at',{ascending:false}).then(function(r){
+        if(r.error){box.appendChild(el('p','note','שגיאה בטעינה'));return}
+        if(!r.data.length){p.appendChild(el('p','note','עוד לא שמרתם עיצוב. לחצו "שמור" בראש המסך.'));return}
+        r.data.forEach(function(d){var w=el('div');w.style.minWidth='0';var b=el('button','thumb');b.type='button';if(d.thumb){var im=el('img');im.src=d.thumb;im.alt=d.name;b.appendChild(im)}b.appendChild(el('span',null,d.name));b.addEventListener('click',function(){loadDesign(d.id)});w.appendChild(b);
+          var x=el('button','btn sm','מחק');x.type='button';x.style.cssText='margin-top:4px;color:var(--danger)';x.addEventListener('click',function(){if(!confirm('למחוק את העיצוב "'+d.name+'"?'))return;sb.from('designs').delete().eq('id',d.id).then(function(){if(DID===d.id){DID=null}drawLeft()})});w.appendChild(x);box.appendChild(w)});
+      });
+    }
   }
+  var G=function(a,b){S.bg={type:'gradient',a:a,b:b,color:'',src:'',overlay:0,blur:0};S.sel=null};
+  var P=function(i,ov){S.bg={type:'image',a:'',b:'',color:'',src:GAL[i][1],overlay:ov==null?.3:ov,blur:0};S.sel=null};
+  var T=function(t,o){return newText(t,o)};
+  var R=function(o){return {align:'right',w:1500,x:210}};
   function tplBlank(){S.bg={type:'color',a:'#14305f',b:'#2b5bb3',color:'#ffffff',src:'',overlay:0,blur:0};S.els=[];S.sel=null}
-  function tplSale(){S.bg={type:'image',a:'',b:'',color:'',src:GAL[0][1],overlay:.28,blur:0};S.sel=null;
-    S.els=[newText('בורקס חם',{fs:230,fw:900,font:'Rubik',y:250,shadow:true}),newText('כל בוקר עד 11:00',{fs:84,fw:500,y:560,shadow:true}),newText('2 ב-20 ₪',{fs:56,fw:800,w:360,x:1380,y:90,bgOn:true,bgColor:'#f2c14e',color:'#14202e',radius:99,pad:16})]}
-  function tplVaad(){S.bg={type:'gradient',a:'#14305f',b:'#2b5bb3',color:'',src:'',overlay:0,blur:0};S.sel=null;
-    S.els=[newText('הודעת ועד הבית',{fs:56,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),newText('פינוי גזם ביום שלישי',{fs:160,fw:800,align:'right',w:1500,x:210,y:240}),newText('נא להוציא את הגזם עד 08:00 ליד הכניסה הצפונית.',{fs:68,fw:400,align:'right',w:1500,x:210,y:560}),newText('מוצגת עד 12.11',{fs:44,fw:700,w:420,x:210,y:900,bgOn:true,bgColor:'#ffffff33',radius:99,pad:12})]}
-  function tplGreet(){S.bg={type:'image',a:'',b:'',color:'',src:GAL[2][1],overlay:.15,blur:0};S.sel=null;
-    S.els=[newText('חג שמח',{fs:300,fw:900,font:'Secular One',y:260,shadow:true}),newText('מאחלים לכולם חג שמח ומבורך',{fs:86,fw:500,y:660,shadow:true})]}
-
+  var TPL={
+    blank:tplBlank,
+    vaad:function(){G('#14305f','#2b5bb3');S.els=[T('הודעת ועד הבית',{fs:56,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),T('פינוי גזם ביום שלישי',{fs:160,fw:800,align:'right',w:1500,x:210,y:240}),T('נא להוציא את הגזם עד 08:00 ליד הכניסה הצפונית.',{fs:68,fw:400,align:'right',w:1500,x:210,y:560}),T('מוצגת עד 12.11',{fs:44,fw:700,w:420,x:210,y:900,bgOn:true,bgColor:'#ffffff33',radius:99,pad:12})]},
+    alert:function(){G('#7a1a1a','#c04040');S.els=[T('הודעה דחופה',{fs:60,fw:800,align:'right',w:1500,x:210,y:110}),T('אין מים בבניין',{fs:200,fw:900,font:'Rubik',align:'right',w:1500,x:210,y:240}),T('הפסקה מתוכננת עד 14:00. הטיפול בעיצומו.',{fs:76,fw:400,align:'right',w:1500,x:210,y:620})]},
+    assembly:function(){G('#17463a','#3d9a78');S.els=[T('אסיפת דיירים',{fs:60,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),T('יום חמישי, 20:30',{fs:170,fw:800,align:'right',w:1500,x:210,y:240}),T('בחדר המשותף בקומת הכניסה. נושאים: תקציב, מעלית, חניה.',{fs:68,fw:400,align:'right',w:1500,x:210,y:580})]},
+    greet:function(){P(2,.15);S.els=[T('חג שמח',{fs:300,fw:900,font:'Secular One',y:260,shadow:true}),T('מאחלים לכולם חג שמח ומבורך',{fs:86,fw:500,y:660,shadow:true})]},
+    welcome:function(){G('#1c2431','#3a4a63');S.els=[T('ברוכים הבאים',{fs:64,fw:500,align:'right',w:1500,x:210,y:150,color:'#ffffffcc'}),T('חברת אלפא בע"מ',{fs:170,fw:800,align:'right',w:1500,x:210,y:260}),T('אורחים: אנא פנו לקבלה. פגישה עם דנה, קומה 3.',{fs:68,fw:400,align:'right',w:1500,x:210,y:600})]},
+    notice:function(){G('#2a2f3d','#4b566e');S.els=[T('הודעת הנהלה',{fs:56,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),T('עדכון נוהל כניסה לבניין',{fs:140,fw:800,align:'right',w:1500,x:210,y:240}),T('החל מיום ראשון הכניסה באמצעות כרטיס עובד בלבד.',{fs:68,fw:400,align:'right',w:1500,x:210,y:560})]},
+    event:function(){P(1,.4);S.els=[T('אירוע',{fs:52,fw:800,w:240,x:840,y:180,bgOn:true,bgColor:'#f2c14e',color:'#14202e',radius:99,pad:12}),T('יום גיבוש חברה',{fs:190,fw:900,y:300,shadow:true}),T('חמישי 14:00, חצר המשרד. נא להירשם אצל דנה.',{fs:70,fw:500,y:650,shadow:true})]},
+    promo:function(){P(0,.28);S.els=[T('בורקס חם',{fs:230,fw:900,font:'Rubik',y:250,shadow:true}),T('כל בוקר עד 11:00',{fs:84,fw:500,y:560,shadow:true}),T('2 ב-20 ₪',{fs:56,fw:800,w:360,x:1380,y:90,bgOn:true,bgColor:'#f2c14e',color:'#14202e',radius:99,pad:16})]},
+    menu:function(){G('#3d2b1a','#7a4a1a');var rows=[['בורקס גבינה','12'],['בורקס תפוח אדמה','12'],['חלה','18'],['קפה הפוך','10'],['עוגיות (100 גרם)','15']];S.els=[T('התפריט שלנו',{fs:120,fw:800,y:70,shadow:true})];rows.forEach(function(r,i){S.els.push(T(r[0],{fs:68,fw:500,align:'right',w:900,x:910,y:290+i*130,color:'#ffffff'}));S.els.push(T('₪'+r[1],{fs:68,fw:800,align:'left',w:300,x:200,y:290+i*130,color:'#f2c14e'}))})},
+    hours:function(){G('#10161f','#2c3a52');S.els=[T('שעות פתיחה',{fs:130,fw:800,y:110}),T('ראשון עד חמישי  07:00 – 20:00',{fs:84,fw:500,y:400}),T('שישי  07:00 – 14:00',{fs:84,fw:500,y:560}),T('שבת  סגור',{fs:84,fw:500,y:720,color:'#ffffffaa'})]},
+    shabbat:function(){G('#14305f','#6a5acd');S.els=[T('שבת שלום',{fs:250,fw:900,font:'Secular One',y:100,shadow:true}),T('הדלקת נרות  16:32',{fs:96,fw:700,y:480}),T('צאת השבת  17:34',{fs:96,fw:700,y:640}),T('השעות לדוגמה. אפשר למלא אוטומטית בלשונית זמני שבת.',{fs:40,fw:400,y:900,color:'#ffffffaa'})]},
+    dedic:function(){G('#5a1830','#c04a6a');S.els=[T('לעילוי נשמת',{fs:70,fw:500,y:150,color:'#ffffffcc'}),T('שם הנפטר בן שם האב ז"ל',{fs:150,fw:800,font:'Frank Ruhl Libre',y:300,shadow:true}),T('נלב"ע י"ד בחשוון. יהי זכרו ברוך',{fs:68,fw:400,y:650})]},
+    community:function(){G('#17463a','#3a7d6b');S.els=[T('הודעת קהילה',{fs:56,fw:500,align:'right',w:1500,x:210,y:120,color:'#ffffffcc'}),T('שיעור מיוחד במוצאי שבת',{fs:150,fw:800,align:'right',w:1500,x:210,y:240}),T('בבית הכנסת, אחרי תפילת ערבית. הציבור מוזמן.',{fs:68,fw:400,align:'right',w:1500,x:210,y:560})]}
+  };
   /* ---------- right panel ---------- */
   function ctl(label,node,cls){var l=el('label','f '+(cls||''));l.appendChild(document.createTextNode(label));l.appendChild(node);return l}
   function num(v,min,max,step,on){var i=el('input');i.type='number';i.value=v;i.min=min;i.max=max;i.step=step||1;i.addEventListener('input',function(){if(i.value==='')return;on(+i.value)});i.addEventListener('change',function(){commit()});return i}
@@ -394,6 +424,30 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
       var next=p.data&&p.data[0]?p.data[0].position+1:0;
       return sb.from('slides').insert({client_id:CID,image_path:path,title:'עיצוב',period:meta.period,dur:Math.max(3,Math.min(60,meta.dur)),position:next})}).then(function(x){if(x.error)throw x.error});
   }
+  var CAT='biz',DID=new URLSearchParams(location.search).get('d'),dirty=false;
+  function initClient(){
+    sb.from('clients').select('name,biz_type').eq('id',CID).maybeSingle().then(function(r){if(r.data){CAT=window.catOf(r.data.biz_type);drawLeft();
+      document.title='עורך תמונה, '+r.data.name}});
+    if(DID)loadDesign(DID);
+  }
+  function loadDesign(id){
+    sb.from('designs').select('*').eq('id',id).maybeSingle().then(function(r){
+      if(!r.data){toast('העיצוב לא נמצא');DID=null;return}
+      var d=r.data.data;S.bg=d.bg;S.els=d.els;S.sel=null;uid=d.uid||(Math.max.apply(null,d.els.map(function(e){return e.id}).concat([0]))+1);
+      DID=r.data.id;$('#dname').value=r.data.name;hist=[];hi=-1;commit();render();drawProps();dirty=false;history.replaceState(null,'','?c='+CID+'&d='+DID);toast('העיצוב נטען');
+    });
+  }
+  function thumbOf(blob){return new Promise(function(res){var u=URL.createObjectURL(blob),i=new Image();i.onload=function(){var c=document.createElement('canvas');c.width=320;c.height=180;c.getContext('2d').drawImage(i,0,0,320,180);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.7))};i.onerror=function(){res(null)};i.src=u})}
+  $('#saveD').addEventListener('click',function(){
+    var b=$('#saveD');b.disabled=true;b.textContent='שומר...';var keep=S.sel;S.sel=null;render();
+    exportBlob().then(thumbOf).then(function(th){
+      S.sel=keep;render();
+      var row={client_id:CID,name:$('#dname').value.trim()||'עיצוב ללא שם',data:{bg:S.bg,els:S.els,uid:uid},thumb:th,updated_at:new Date().toISOString()};
+      return DID?sb.from('designs').update(row).eq('id',DID).select('id').single():sb.from('designs').insert(row).select('id').single();
+    }).then(function(r){if(r.error)throw r.error;DID=r.data.id;dirty=false;history.replaceState(null,'','?c='+CID+'&d='+DID);toast('העיצוב נשמר');if(ltab==='mine')drawLeft()})
+    .catch(function(e){S.sel=keep;render();toast('שגיאה בשמירה: '+(e&&e.message||e))}).then(function(){b.disabled=false;b.textContent='שמור'});
+  });
+  window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue=''}});
   window.__exportBlob=function(){return exportBlob()};
   function loadImg(src){return new Promise(function(res,rej){var i=new Image();i.onload=function(){res(i)};i.onerror=rej;i.src=src})}
   function rrect(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
@@ -431,7 +485,7 @@ input[type=color]{width:34px;height:30px;padding:0;border:1.5px solid var(--line
     });
   }
 
-  tplSale();commit();render();drawLeft();drawProps();
+  TPL.promo();commit();render();drawLeft();drawProps();initClient();
   setTimeout(fit,50);
 })();
 </script>

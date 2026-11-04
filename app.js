@@ -12,6 +12,7 @@
   }
   var sb = window.supabase.createClient(C.url, C.key);
 
+  var CATS = window.CATS, catOf = window.catOf;
   var MODS = {shabbat:'זמני שבת וחגים', ticker:'פס רץ וחיזוקים'};
   var PERIODS = {all:'כל היום', m:'בוקר (עד 12:00)', n:'צהריים (12:00 עד 17:00)', e:'ערב (אחרי 17:00)', w:'ימי חול בלבד', f:'שישי בלבד'};
   var TIERS = {base:'בסיס', prem:'פרימיום'}, EQ = {dep:'ערבון', buy:'נרכש'};
@@ -114,7 +115,7 @@
         var body = el('tbody');
         clients.forEach(function(c){
           var scr = (c.screens && c.screens[0]) || null, tr = el('tr');
-          tr.appendChild(el('td', null, c.name)); tr.appendChild(el('td', null, c.biz_type || ''));
+          tr.appendChild(el('td', null, c.name)); tr.appendChild(el('td', null, (CATS[catOf(c.biz_type)] || {}).n || ''));
           var t = el('td'); t.appendChild(el('span', 'pill tier', TIERS[c.tier])); tr.appendChild(t);
           tr.appendChild(el('td', null, EQ[c.equipment]));
           var st = el('td'), a = scr ? agoText(scr.last_seen) : ['אין מסך', 'warn'];
@@ -174,13 +175,18 @@
   function addClientForm(){
     var box = el('div', 'box'); box.appendChild(el('h2', null, 'הוספת לקוח'));
     var f = el('form'), n = input('text', 'n'); n.required = true;
-    var ty = select(Object.keys(TYPES).reduce(function(o, k){ o[k] = k; return o; }, {}));
+    var ty = select(Object.keys(CATS).reduce(function(o, k){ o[k] = CATS[k].n; return o; }, {}), 'biz');
     var tr = select(TIERS), eq = select(EQ);
-    f.appendChild(field('שם העסק', n)); f.appendChild(field('סוג עסק', ty)); f.appendChild(field('מסלול', tr)); f.appendChild(field('ציוד', eq));
+    var info = el('div', 'note full');
+    f.appendChild(field('שם הלקוח', n)); f.appendChild(field('קטגוריה', ty)); f.appendChild(info); f.appendChild(field('מסלול', tr)); f.appendChild(field('ציוד', eq));
     var fs = el('fieldset'); fs.appendChild(el('legend', null, 'יכולות בממשק הלקוח'));
     var boxes = {};
     Object.keys(MODS).forEach(function(k){ var l = el('label', 'chk'), i = input('checkbox', null); boxes[k] = i; l.appendChild(i); l.appendChild(document.createTextNode(MODS[k])); fs.appendChild(l); });
-    function defaults(){ Object.keys(boxes).forEach(function(k){ boxes[k].checked = (TYPES[ty.value] || []).indexOf(k) > -1; }); }
+    function defaults(){
+      var c = CATS[ty.value]; tr.value = c.tier; eq.value = c.eq;
+      Object.keys(boxes).forEach(function(k){ boxes[k].checked = c.mods.indexOf(k) > -1; });
+      info.textContent = c.s + '. ' + c.plan + ' ציוד מומלץ: ' + c.equip;
+    }
     ty.addEventListener('change', defaults); defaults(); f.appendChild(fs);
     var msg = el('p', 'note full', ''), go = el('button', 'p', 'צור לקוח'); go.type = 'submit';
     f.appendChild(go); f.appendChild(msg);
@@ -191,8 +197,9 @@
         if(!ok(r)){ go.disabled = false; return; }
         sb.from('screens').insert({client_id:r.data.id}).select().single().then(function(s){
           go.disabled = false; if(!ok(s)) return;
-          msg.textContent = 'נוצר. קישור הנגן למסך: ' + playerLink(s.data.token);
-          toast('הלקוח נוצר'); setTimeout(renderAdmin, 4000);
+          msg.textContent = 'נוצר. קישור הנגן למסך: ' + playerLink(s.data.token) + '\nצ׳קליסט קליטה: ' + CATS[ty.value].ck.map(function(x, i){ return (i + 1) + '. ' + x; }).join('  |  ');
+          msg.style.whiteSpace = 'pre-wrap';
+          toast('הלקוח נוצר'); setTimeout(renderAdmin, 15000);
         });
       });
     });
